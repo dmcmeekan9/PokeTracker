@@ -59,8 +59,11 @@ resource "aws_iam_role_policy" "github_actions" {
           "ecr:DescribeRepositories",
           "ecr:GetDownloadUrlForLayer",
           "ecr:InitiateLayerUpload",
+          "ecr:ListTagsForResource",
           "ecr:ListImages",
           "ecr:PutImage",
+          "ecr:TagResource",
+          "ecr:UntagResource",
           "ecr:UploadLayerPart"
         ]
         Resource = "*"

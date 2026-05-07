@@ -1,0 +1,2 @@
+github_repository     = "YOUR_GITHUB_OWNER/PokeTracker"
+alert_recipient_email = "you@example.com"

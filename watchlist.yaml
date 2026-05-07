@@ -1,0 +1,15 @@
+global:
+  purchasing_enabled: false
+  weekly_spend_cap: 150
+  timezone: America/Chicago
+
+items:
+  - id: bestbuy-example-etb
+    name: "Example Pokemon Elite Trainer Box"
+    retailer: bestbuy
+    url: "https://www.bestbuy.com/site/example/0000000.p"
+    type: ETB
+    msrp: 49.99
+    max_quantity: 1
+    enabled: false
+    sku: "0000000"

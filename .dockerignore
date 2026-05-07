@@ -1,0 +1,10 @@
+.git
+.github
+.terraform
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+tests
+infra
+watchlist.yaml

@@ -45,6 +45,7 @@ def _render_decision(decision: Decision) -> str:
         [
             f"Decision: {decision.type.value}",
             f"Reason: {decision.reason}",
+            f"URL: {decision.url}",
             "",
             f"Item: {decision.item.name}",
             f"Item ID: {decision.item.id}",
@@ -56,7 +57,6 @@ def _render_decision(decision: Decision) -> str:
             f"Quantity: {decision.quantity}",
             f"Weekly spend before: {_fmt(decision.weekly_spend_before)}",
             f"Weekly spend after: {_fmt(decision.weekly_spend_after)}",
-            f"URL: {decision.url}",
             f"Timestamp: {decision.timestamp.isoformat()}",
         ]
     )

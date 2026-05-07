@@ -44,3 +44,4 @@ def test_render_would_buy_email() -> None:
     assert "Observed price: $59.99" in body
     assert "Seller classification: retailer" in body
     assert "Weekly spend after: $59.99" in body
+    assert body.splitlines()[2] == "URL: https://www.target.com/p/example/-/A-95082118"

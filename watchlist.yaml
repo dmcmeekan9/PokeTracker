@@ -13,3 +13,24 @@ items:
     max_quantity: 1
     enabled: true
     sku: "95082118"
+
+  - id: target-destined-rivals-etb
+    name: "Target: Destined Rivals Elite Trainer Box"
+    retailer: target
+    url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-destined-rivals-elite-trainer-box/-/A-94300069"
+    type: ETB
+    msrp: 54.99
+    max_quantity: 1
+    enabled: true
+    sku: "94300069"
+
+  - id: target-prismatic-evolutions-etb
+    name: "Target: Prismatic Evolutions Elite Trainer Box"
+    retailer: target
+    url: "https://www.target.com/p/pok--233-mon-trading-card-game--scarlet---38--violet--8212-prismatic-evolutions-elite-trainer-box/-/A-1011206804"
+    type: ETB
+    msrp: 69.99
+    max_quantity: 1
+    enabled: true
+    sku: "1011206804"
+  

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from poketracker.models import SignalStatus
-from poketracker.signals.page import _extract_price, _extract_status
+from poketracker.models import ProductType, Retailer, SellerClassification, SignalStatus, WatchlistItem
+from poketracker.signals.page import RetailerPageSignalAdapter, _classify_seller, _extract_price, _extract_status
 
 
 def test_disabled_add_to_cart_button_is_out_of_stock() -> None:
@@ -28,3 +28,38 @@ def test_extracts_structured_price() -> None:
     html = '{"current_retail":59.99}'
 
     assert _extract_price(html) == Decimal("59.99")
+
+
+def test_target_without_marketplace_marker_is_retailer() -> None:
+    seller, seller_name = _classify_seller(item(), "target product detail page")
+
+    assert seller == SellerClassification.RETAILER
+    assert seller_name == "Target"
+
+
+def test_target_in_stock_uses_msrp_when_price_is_deferred(monkeypatch) -> None:
+    class Response:
+        status_code = 200
+        text = '<button type="button">Add to cart</button>'
+
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: Response())
+
+    signal = RetailerPageSignalAdapter().check(item())
+
+    assert signal.status == SignalStatus.IN_STOCK
+    assert signal.observed_price == Decimal("59.99")
+    assert signal.seller == SellerClassification.RETAILER
+
+
+def item() -> WatchlistItem:
+    return WatchlistItem(
+        id="target-ascended-heroes-etb",
+        name="Target: Ascended Heroes Elite Trainer Box",
+        retailer=Retailer.TARGET,
+        url="https://www.target.com/p/example/-/A-95082118",
+        type=ProductType.ETB,
+        msrp=Decimal("59.99"),
+        max_quantity=1,
+        enabled=True,
+        sku="95082118",
+    )

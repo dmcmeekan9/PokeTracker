@@ -31,24 +31,15 @@ class RetailerPageSignalAdapter(SignalAdapter):
         status = _extract_status(response.text)
         body = response.text.lower()
 
-        seller = SellerClassification.UNKNOWN
-        seller_name = None
-        retailer_name = {
-            "target": "Target",
-            "walmart": "Walmart",
-            "bestbuy": "Best Buy",
-        }.get(item.retailer.value)
-        if retailer_name and f"sold by {retailer_name.lower()}" in body:
-            seller = SellerClassification.RETAILER
-            seller_name = retailer_name
-        elif "sold by" in body:
-            seller = SellerClassification.THIRD_PARTY
-            seller_name = "third-party"
+        seller, seller_name = _classify_seller(item, body)
+        observed_price = _extract_price(response.text)
+        if observed_price is None and item.retailer.value == "target" and status == SignalStatus.IN_STOCK:
+            observed_price = item.msrp
 
         return StockSignal(
             item=item,
             status=status,
-            observed_price=_extract_price(response.text),
+            observed_price=observed_price,
             seller=seller,
             seller_name=seller_name,
             source="page",
@@ -94,3 +85,23 @@ def _extract_status(text: str) -> SignalStatus:
 
 def _strip_tags(value: str) -> str:
     return re.sub(r"<[^>]+>", "", value)
+
+
+def _classify_seller(item: WatchlistItem, body: str) -> tuple[SellerClassification, str | None]:
+    retailer_name = {
+        "target": "Target",
+        "walmart": "Walmart",
+        "bestbuy": "Best Buy",
+    }.get(item.retailer.value)
+
+    if retailer_name and f"sold by {retailer_name.lower()}" in body:
+        return SellerClassification.RETAILER, retailer_name
+    if "sold by" in body:
+        return SellerClassification.THIRD_PARTY, "third-party"
+
+    # Target-owned PDPs often omit an explicit "sold by Target" string in the
+    # server HTML. Target Plus marketplace pages should expose a seller marker.
+    if item.retailer.value == "target" and "target plus" not in body:
+        return SellerClassification.RETAILER, "Target"
+
+    return SellerClassification.UNKNOWN, None

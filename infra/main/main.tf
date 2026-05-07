@@ -263,6 +263,7 @@ resource "aws_ecs_task_definition" "app" {
         { name = "STATE_TABLE_NAME", value = aws_dynamodb_table.state.name },
         { name = "ALERT_SENDER_EMAIL", value = var.alert_sender_email },
         { name = "ALERT_RECIPIENT_EMAIL", value = var.alert_recipient_email },
+        { name = "EMAIL_FOOTER_GIF_URL", value = var.email_footer_gif_url },
         { name = "BESTBUY_API_KEY_SECRET_ARN", value = aws_secretsmanager_secret.bestbuy_api_key.arn },
         { name = "GITHUB_APP_SECRET_ARN", value = aws_secretsmanager_secret.github_app.arn }
       ]

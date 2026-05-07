@@ -31,3 +31,9 @@ variable "image_tag" {
   type        = string
   default     = "latest"
 }
+
+variable "email_footer_gif_url" {
+  description = "Optional public HTTPS GIF URL rendered at the bottom of HTML alert emails."
+  type        = string
+  default     = ""
+}

@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--file", default="watchlist.yaml", help="Path to watchlist YAML.")
     parser.add_argument("--item-id", required=True, help="Watchlist item id to preview.")
     parser.add_argument("--weekly-spend-before", default="0", help="Weekly spend before this candidate purchase.")
+    parser.add_argument("--footer-gif-url", help="Optional public HTTPS GIF URL to render at the bottom of the HTML email.")
     parser.add_argument("--send-test", action="store_true", help="Send the preview through SES with a TEST subject prefix.")
     args = parser.parse_args()
 
@@ -33,13 +34,24 @@ def main() -> None:
         message="preview in-stock signal",
     )
     decision = RulesEngine(config.global_config).evaluate(signal, Decimal(args.weekly_spend_before))
-    subject, body = render_decision_email(decision, subject_prefix="[TEST]" if args.send_test else None)
+    subject, body, html_body = render_decision_email(
+        decision,
+        subject_prefix="[TEST]" if args.send_test else None,
+        footer_gif_url=args.footer_gif_url,
+    )
 
     print(f"Subject: {subject}")
     print()
     print(body)
+    print()
+    print("HTML preview:")
+    print(html_body)
 
     if args.send_test:
+        if args.footer_gif_url:
+            import os
+
+            os.environ["EMAIL_FOOTER_GIF_URL"] = args.footer_gif_url
         SesNotifier().send_decision(decision, subject_prefix="[TEST]")
         print()
         print("Sent test email.")

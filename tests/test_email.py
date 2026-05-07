@@ -37,7 +37,11 @@ def test_render_would_buy_email() -> None:
         url="https://www.target.com/p/example/-/A-95082118",
     )
 
-    subject, body = render_decision_email(decision, subject_prefix="[TEST]")
+    subject, body, html_body = render_decision_email(
+        decision,
+        subject_prefix="[TEST]",
+        footer_gif_url="https://example.com/footer.gif",
+    )
 
     assert subject == "[TEST] PokeTracker WOULD_BUY: Target: Ascended Heroes Elite Trainer Box"
     assert "Decision: WOULD_BUY" in body
@@ -45,3 +49,6 @@ def test_render_would_buy_email() -> None:
     assert "Seller classification: retailer" in body
     assert "Weekly spend after: $59.99" in body
     assert body.splitlines()[2] == "URL: https://www.target.com/p/example/-/A-95082118"
+    assert "<strong>Reason:</strong> dry-run would buy" in html_body
+    assert "Open Target Page" in html_body
+    assert "https://example.com/footer.gif" in html_body

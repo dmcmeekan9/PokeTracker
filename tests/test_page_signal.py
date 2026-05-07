@@ -51,6 +51,29 @@ def test_target_in_stock_uses_msrp_when_price_is_deferred(monkeypatch) -> None:
     assert signal.seller == SellerClassification.RETAILER
 
 
+def test_target_in_stock_signal_becomes_would_buy(monkeypatch) -> None:
+    from poketracker.models import GlobalConfig
+    from poketracker.rules.engine import RulesEngine
+
+    class Response:
+        status_code = 200
+        text = '<button type="button">Add to cart</button>'
+
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: Response())
+
+    signal = RetailerPageSignalAdapter().check(item())
+    decision = RulesEngine(
+        GlobalConfig(
+            purchasing_enabled=False,
+            weekly_spend_cap=Decimal("150"),
+            timezone="America/Chicago",
+        )
+    ).evaluate(signal, weekly_spend_before=Decimal("0"))
+
+    assert decision.type.value == "WOULD_BUY"
+    assert decision.observed_price == Decimal("59.99")
+
+
 def item() -> WatchlistItem:
     return WatchlistItem(
         id="target-ascended-heroes-etb",

@@ -19,9 +19,8 @@ class SesNotifier:
         self.recipient = recipient or os.environ["ALERT_RECIPIENT_EMAIL"]
         self._ses = boto3.client("ses", region_name=region_name or os.environ.get("AWS_REGION", "us-east-1"))
 
-    def send_decision(self, decision: Decision) -> None:
-        subject = f"PokeTracker {decision.type.value}: {decision.item.name}"
-        body = _render_decision(decision)
+    def send_decision(self, decision: Decision, subject_prefix: str | None = None) -> None:
+        subject, body = render_decision_email(decision, subject_prefix=subject_prefix)
         self._ses.send_email(
             Source=self.sender,
             Destination={"ToAddresses": [self.recipient]},
@@ -34,6 +33,11 @@ class SesNotifier:
 
 def _fmt(value: Decimal | None) -> str:
     return "unknown" if value is None else f"${value:.2f}"
+
+
+def render_decision_email(decision: Decision, subject_prefix: str | None = None) -> tuple[str, str]:
+    prefix = f"{subject_prefix} " if subject_prefix else ""
+    return f"{prefix}PokeTracker {decision.type.value}: {decision.item.name}", _render_decision(decision)
 
 
 def _render_decision(decision: Decision) -> str:

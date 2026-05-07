@@ -17,6 +17,7 @@ dev = [
 
 [project.scripts]
 poketracker = "poketracker.main:main"
+poketracker-preview-email = "poketracker.preview_email:main"
 poketracker-validate-watchlist = "poketracker.validate_watchlist:main"
 poketracker-sync-watchlist = "poketracker.sync_watchlist:main"
 

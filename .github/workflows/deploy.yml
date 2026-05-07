@@ -18,7 +18,7 @@ jobs:
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
       TF_VAR_github_repository: ${{ github.repository }}
       TF_VAR_alert_recipient_email: ${{ vars.ALERT_RECIPIENT_EMAIL }}
-      TF_VAR_email_footer_gif_url: ${{ vars.EMAIL_FOOTER_GIF_URL }}
+      TF_VAR_email_footer_gif_url: ${{ vars.EMAIL_FOOTER_GIF_URL || 'https://www.gifcen.com/wp-content/uploads/2023/03/-8.gif' }}
       TF_VAR_image_tag: ${{ github.sha }}
 
     steps:

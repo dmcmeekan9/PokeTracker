@@ -35,5 +35,5 @@ variable "image_tag" {
 variable "email_footer_gif_url" {
   description = "Optional public HTTPS GIF URL rendered at the bottom of HTML alert emails."
   type        = string
-  default     = ""
+  default     = "https://www.gifcen.com/wp-content/uploads/2023/03/-8.gif"
 }

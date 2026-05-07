@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal, InvalidOperation
+from html import unescape
 
 import requests
 
@@ -27,12 +28,8 @@ class RetailerPageSignalAdapter(SignalAdapter):
                 message=f"HTTP {response.status_code}",
             )
 
+        status = _extract_status(response.text)
         body = response.text.lower()
-        status = SignalStatus.UNKNOWN
-        if any(marker in body for marker in ["add to cart", "add for shipping", "ship it"]):
-            status = SignalStatus.IN_STOCK
-        elif any(marker in body for marker in ["out of stock", "sold out", "currently unavailable"]):
-            status = SignalStatus.OUT_OF_STOCK
 
         seller = SellerClassification.UNKNOWN
         seller_name = None
@@ -60,10 +57,40 @@ class RetailerPageSignalAdapter(SignalAdapter):
 
 
 def _extract_price(text: str) -> Decimal | None:
-    match = re.search(r"\$\s*([0-9]+(?:\.[0-9]{2})?)", text)
+    price_patterns = [
+        r'"current_retail"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)',
+        r'"salePrice"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)',
+        r'"regularPrice"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)',
+        r'"formatted_current_price"\s*:\s*"\$\s*([0-9]+(?:\.[0-9]{2})?)"',
+    ]
+    match = None
+    for pattern in price_patterns:
+        match = re.search(pattern, text)
+        if match:
+            break
     if not match:
         return None
     try:
         return Decimal(match.group(1))
     except InvalidOperation:
         return None
+
+
+def _extract_status(text: str) -> SignalStatus:
+    lower_text = text.lower()
+    if any(marker in lower_text for marker in ["out of stock", "sold out", "currently unavailable"]):
+        return SignalStatus.OUT_OF_STOCK
+
+    for button_match in re.finditer(r"<button\b(?P<attrs>[^>]*)>(?P<label>.*?)</button>", text, re.IGNORECASE | re.DOTALL):
+        attrs = button_match.group("attrs").lower()
+        label = _strip_tags(unescape(button_match.group("label"))).strip().lower()
+        if label == "add to cart":
+            return SignalStatus.OUT_OF_STOCK if "disabled" in attrs else SignalStatus.IN_STOCK
+
+    if any(marker in lower_text for marker in ["add for shipping", "ship it"]):
+        return SignalStatus.IN_STOCK
+    return SignalStatus.UNKNOWN
+
+
+def _strip_tags(value: str) -> str:
+    return re.sub(r"<[^>]+>", "", value)

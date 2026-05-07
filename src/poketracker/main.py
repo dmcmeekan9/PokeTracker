@@ -4,6 +4,7 @@ import logging
 import os
 
 import boto3
+from botocore.exceptions import ClientError
 
 from poketracker.checkout.dry_run import DryRunCheckoutAdapter
 from poketracker.models import DecisionType, Retailer, WatchlistItem
@@ -70,7 +71,14 @@ def _load_secret(secret_arn: str | None) -> str | None:
     if not secret_arn:
         return None
     client = boto3.client("secretsmanager", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-    response = client.get_secret_value(SecretId=secret_arn)
+    try:
+        response = client.get_secret_value(SecretId=secret_arn)
+    except ClientError as exc:
+        error_code = exc.response.get("Error", {}).get("Code")
+        if error_code in {"ResourceNotFoundException", "InvalidRequestException"}:
+            LOGGER.warning("optional secret is not ready: %s", secret_arn)
+            return None
+        raise
     return response.get("SecretString")
 
 

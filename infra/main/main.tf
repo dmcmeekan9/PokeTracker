@@ -320,6 +320,7 @@ resource "aws_iam_role_policy" "eventbridge" {
 resource "aws_cloudwatch_event_rule" "schedule" {
   name                = "${local.name_prefix}-schedule"
   schedule_expression = var.schedule_expression
+  state               = "ENABLED"
 }
 
 resource "aws_cloudwatch_event_target" "task" {

@@ -77,6 +77,7 @@ def _render_text_decision(decision: Decision) -> str:
 
 
 def _render_html_decision(decision: Decision, footer_gif_url: str | None = None) -> str:
+    escaped_url = html.escape(decision.url, quote=True)
     fields = [
         ("Item", decision.item.name),
         ("Item ID", decision.item.id),
@@ -111,18 +112,23 @@ def _render_html_decision(decision: Decision, footer_gif_url: str | None = None)
     return f"""<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,Helvetica,sans-serif;color:#202124;">
+    <div style="display:none;max-height:0;overflow:hidden;color:#f6f8fb;">Open Target Page: {html.escape(decision.url)}</div>
     <div style="max-width:640px;margin:0 auto;padding:24px;">
       <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
         <div style="padding:22px 24px;background:#29233a;color:#ffffff;">
           <div style="font-size:12px;line-height:1.2;text-transform:uppercase;letter-spacing:.08em;color:#c9c2ff;font-weight:700;">PokeTracker Alert</div>
           <div style="font-size:24px;line-height:1.25;font-weight:800;margin-top:8px;">{html.escape(decision.type.value)}</div>
+          <div style="font-size:16px;line-height:1.35;font-weight:700;margin-top:8px;">{html.escape(decision.item.name)}</div>
+          <div style="margin-top:18px;">
+            <a href="{escaped_url}" style="display:block;background:#d9272e;color:#ffffff;text-align:center;text-decoration:none;font-weight:800;border-radius:8px;padding:14px 18px;">Open Target Page</a>
+          </div>
+          <div style="font-size:12px;line-height:1.4;margin-top:10px;word-break:break-word;color:#ded9ff;">
+            {html.escape(decision.url)}
+          </div>
         </div>
         <div style="padding:24px;">
           <p style="margin:0 0 12px;font-size:15px;line-height:1.45;"><strong>Reason:</strong> {html.escape(decision.reason)}</p>
-          <p style="margin:0 0 20px;">
-            <a href="{html.escape(decision.url, quote=True)}" style="display:inline-block;background:#d9272e;color:#ffffff;text-decoration:none;font-weight:800;border-radius:8px;padding:12px 18px;">Open Target Page</a>
-          </p>
-          <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;border:1px solid #edf0f3;border-radius:8px;overflow:hidden;">
+          <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;border:1px solid #edf0f3;border-radius:8px;overflow:hidden;margin-top:18px;">
             {rows}
           </table>
           {footer_gif}

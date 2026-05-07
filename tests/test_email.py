@@ -51,4 +51,5 @@ def test_render_would_buy_email() -> None:
     assert body.splitlines()[2] == "URL: https://www.target.com/p/example/-/A-95082118"
     assert "<strong>Reason:</strong> dry-run would buy" in html_body
     assert "Open Target Page" in html_body
+    assert "Open Target Page: https://www.target.com/p/example/-/A-95082118" in html_body
     assert "https://example.com/footer.gif" in html_body

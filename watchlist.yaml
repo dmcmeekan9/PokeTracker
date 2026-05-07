@@ -4,12 +4,12 @@ global:
   timezone: America/Chicago
 
 items:
-  - id: bestbuy-example-etb
-    name: "Example Pokemon Elite Trainer Box"
-    retailer: bestbuy
-    url: "https://www.bestbuy.com/site/example/0000000.p"
+  - id: target-ascended-heroes-etb
+    name: "Target: Ascended Heroes Elite Trainer Box"
+    retailer: target
+    url: "https://www.target.com/p/pok--233-mon-trading-card-game--mega-evolution--8212--ascended-heroes-elite-trainer-box/-/A-95082118"
     type: ETB
-    msrp: 49.99
+    msrp: 59.99
     max_quantity: 1
-    enabled: false
-    sku: "0000000"
+    enabled: true
+    sku: "95082118"

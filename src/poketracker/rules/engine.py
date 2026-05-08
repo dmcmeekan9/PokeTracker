@@ -57,10 +57,11 @@ class RulesEngine:
                 weekly_spend_after,
             )
 
+        action = "would buy" if self.global_config.purchasing_enabled else "dry-run would buy"
         return self._decision(
             signal,
             DecisionType.WOULD_BUY,
-            "dry-run would buy: price <= MSRP, seller is retailer, and weekly cap allows it",
+            f"{action}: price <= MSRP, seller is retailer, and weekly cap allows it",
             weekly_spend_before,
             weekly_spend_after,
         )

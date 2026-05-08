@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from decimal import Decimal, InvalidOperation
 from html import unescape
 
@@ -11,12 +12,22 @@ from poketracker.signals.base import SignalAdapter
 
 
 class RetailerPageSignalAdapter(SignalAdapter):
-    def __init__(self, timeout_seconds: int = 10) -> None:
+    def __init__(self, timeout_seconds: int = 10, max_attempts: int = 2, retry_delay_seconds: float = 1.0) -> None:
         self.timeout_seconds = timeout_seconds
+        self.max_attempts = max_attempts
+        self.retry_delay_seconds = retry_delay_seconds
 
     def check(self, item: WatchlistItem) -> StockSignal:
+        response = None
         try:
-            response = requests.get(item.url, timeout=self.timeout_seconds)
+            response = self._get(item.url)
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            return StockSignal(
+                item=item,
+                status=SignalStatus.UNKNOWN,
+                source="page",
+                message=f"transient network failure after {self.max_attempts} attempts: {exc}",
+            )
         except requests.RequestException as exc:
             return StockSignal(item=item, status=SignalStatus.ERROR, source="page", message=str(exc))
 
@@ -45,6 +56,19 @@ class RetailerPageSignalAdapter(SignalAdapter):
             source="page",
             message="page check completed",
         )
+
+    def _get(self, url: str) -> requests.Response:
+        last_exc: requests.RequestException | None = None
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                return requests.get(url, timeout=self.timeout_seconds)
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_exc = exc
+                if attempt < self.max_attempts:
+                    time.sleep(self.retry_delay_seconds)
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("page request was not attempted")
 
 
 def _extract_price(text: str) -> Decimal | None:

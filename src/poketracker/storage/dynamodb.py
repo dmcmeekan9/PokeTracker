@@ -16,12 +16,12 @@ from poketracker.models import (
     DecisionType,
     GlobalConfig,
     Retailer,
-    ProductType,
     SellerClassification,
     SignalStatus,
     StockSignal,
     WatchlistConfig,
     WatchlistItem,
+    parse_product_type,
 )
 
 
@@ -191,7 +191,7 @@ class DynamoStore:
             name=str(record["name"]),
             retailer=Retailer(str(record["retailer"])),
             url=str(record["url"]),
-            type=ProductType(str(record["type"])),
+            type=parse_product_type(str(record["type"])),
             msrp=Decimal(str(record["msrp"])),
             max_quantity=int(record["max_quantity"]),
             enabled=bool(record["enabled"]),

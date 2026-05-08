@@ -34,6 +34,15 @@ def test_parse_valid_watchlist() -> None:
     assert config.items[0].id == "target-sample-etb"
 
 
+def test_parse_booster_bundle_alias() -> None:
+    raw = base_watchlist()
+    raw["items"][0]["type"] = "BB"
+
+    config = parse_watchlist(raw)
+
+    assert config.items[0].type.value == "Booster Bundle"
+
+
 def test_rejects_duplicate_ids() -> None:
     raw = base_watchlist()
     raw["items"].append(dict(raw["items"][0]))

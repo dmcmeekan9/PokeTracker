@@ -43,13 +43,21 @@ def test_render_would_buy_email() -> None:
         footer_gif_url="https://example.com/footer.gif",
     )
 
-    assert subject == "[TEST] PokeTracker WOULD_BUY: Target: Ascended Heroes Elite Trainer Box"
-    assert "Decision: WOULD_BUY" in body
+    assert subject == "[TEST] PokeTracker BUY THIS! Target: Ascended Heroes Elite Trainer Box"
+    assert "Decision: BUY THIS!" in body
     assert "Observed price: $59.99" in body
     assert "Seller classification: retailer" in body
     assert "Weekly spend after: $59.99" in body
     assert body.splitlines()[2] == "URL: https://www.target.com/p/example/-/A-95082118"
     assert "<strong>Reason:</strong> dry-run would buy" in html_body
+    assert ">BUY THIS!</div>" in html_body
+    assert "WOULD_BUY" not in html_body
+    assert "color:#5f6368;font-weight:700;width:180px" in html_body
+    assert "border:1px solid #edf0f3" in html_body
+    assert "background:#f1efff" not in html_body
+    assert "border-right:1px solid #ded8ff" not in html_body
+    assert "PokeTracker alert for" not in html_body
+    assert "font-size:16px;line-height:1.35;font-weight:700;margin-top:8px" not in html_body
     assert "Open Target Page" in html_body
-    assert "Open Target Page: https://www.target.com/p/example/-/A-95082118" in html_body
+    assert html_body.count("https://www.target.com/p/example/-/A-95082118") == 1
     assert "https://example.com/footer.gif" in html_body

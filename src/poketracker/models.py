@@ -18,6 +18,18 @@ class ProductType(StrEnum):
     BOOSTER_BUNDLE = "Booster Bundle"
 
 
+PRODUCT_TYPE_ALIASES = {
+    "BB": ProductType.BOOSTER_BUNDLE,
+    "BOOSTER_BUNDLE": ProductType.BOOSTER_BUNDLE,
+}
+
+
+def parse_product_type(value: str) -> ProductType:
+    if value in PRODUCT_TYPE_ALIASES:
+        return PRODUCT_TYPE_ALIASES[value]
+    return ProductType(value)
+
+
 class SellerClassification(StrEnum):
     RETAILER = "retailer"
     THIRD_PARTY = "third_party"

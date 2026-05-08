@@ -50,6 +50,28 @@ def test_would_buy_when_retailer_and_price_at_msrp() -> None:
 
     assert decision.type.value == "WOULD_BUY"
     assert decision.weekly_spend_after == Decimal("49.99")
+    assert decision.reason.startswith("dry-run would buy:")
+
+
+def test_would_buy_reason_omits_dry_run_when_purchasing_enabled() -> None:
+    signal = StockSignal(
+        item=item(),
+        status=SignalStatus.IN_STOCK,
+        observed_price=Decimal("49.99"),
+        seller=SellerClassification.RETAILER,
+    )
+    real_run_engine = RulesEngine(
+        GlobalConfig(
+            purchasing_enabled=True,
+            weekly_spend_cap=Decimal("150"),
+            timezone="America/Chicago",
+        )
+    )
+
+    decision = real_run_engine.evaluate(signal, weekly_spend_before=Decimal("0"))
+
+    assert decision.type.value == "WOULD_BUY"
+    assert decision.reason.startswith("would buy:")
 
 
 def test_allows_price_below_msrp() -> None:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import requests
+
 from poketracker.models import ProductType, Retailer, SellerClassification, SignalStatus, WatchlistItem
 from poketracker.signals.page import RetailerPageSignalAdapter, _classify_seller, _extract_price, _extract_status
 
@@ -72,6 +74,23 @@ def test_target_in_stock_signal_becomes_would_buy(monkeypatch) -> None:
 
     assert decision.type.value == "WOULD_BUY"
     assert decision.observed_price == Decimal("59.99")
+
+
+def test_target_timeout_retries_and_becomes_unknown(monkeypatch) -> None:
+    attempts = 0
+
+    def raise_timeout(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        raise requests.ConnectTimeout("connect timeout")
+
+    monkeypatch.setattr("requests.get", raise_timeout)
+
+    signal = RetailerPageSignalAdapter(max_attempts=2, retry_delay_seconds=0).check(item())
+
+    assert attempts == 2
+    assert signal.status == SignalStatus.UNKNOWN
+    assert "transient network failure" in (signal.message or "")
 
 
 def item() -> WatchlistItem:

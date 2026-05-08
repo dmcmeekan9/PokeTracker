@@ -14,6 +14,16 @@ items:
     enabled: true
     sku: "95082118"
 
+  - id: target-ascended-heroes-booster-bundle
+    name: "Target: Ascended Heroes Booster Bundle"
+    retailer: target
+    url: "https://www.target.com/p/pok--233-mon-trading-card-game--mega-evolution-ascended-heroes-booster-bundle/-/A-95120834"
+    type: BB
+    msrp: 29.99
+    max_quantity: 1
+    enabled: true
+    sku: "95120834"
+
   - id: target-destined-rivals-etb
     name: "Target: Destined Rivals Elite Trainer Box"
     retailer: target
@@ -23,6 +33,16 @@ items:
     max_quantity: 1
     enabled: true
     sku: "94300069"
+
+  - id: target-destined-rivals-booster-bundle
+    name: "Target: Destined Rivals Booster Bundle"
+    retailer: target
+    url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-destined-rivals-booster-bundle/-/A-94300067"
+    type: BB
+    msrp: 29.99
+    max_quantity: 1
+    enabled: true
+    sku: "94300067"
 
   - id: target-prismatic-evolutions-etb
     name: "Target: Prismatic Evolutions Elite Trainer Box"
@@ -34,6 +54,16 @@ items:
     enabled: true
     sku: "1011206804"
 
+  - id: target-prismatic-evolutions-booster-bundle
+    name: "Target: Prismatic Evolutions Booster Bundle"
+    retailer: target
+    url: "https://www.target.com/p/pok--233-mon-trading-card-game--scarlet---38--violet--8212-prismatic-evolutions-booster-bundle/-/A-93954446"
+    type: BB
+    msrp: 29.99
+    max_quantity: 1
+    enabled: true
+    sku: "93954446"
+
   - id: target-chaos-rising-etb
     name: "Target: Chaos Rising Elite Trainer Box"
     retailer: target
@@ -43,4 +73,14 @@ items:
     max_quantity: 1
     enabled: true
     sku: "95267143"
+
+  - id: target-chaos-rising-booster-bundle
+    name: "Target: Chaos Rising Booster Bundle"
+    retailer: target
+    url: "https://www.target.com/p/pok--233-mon-trading-card-game--mega-evolution-chaos-rising-booster-bundle/-/A-95298172"
+    type: BB
+    msrp: 29.99
+    max_quantity: 1
+    enabled: true
+    sku: "95298172"
   

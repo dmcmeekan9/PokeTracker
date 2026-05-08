@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import requests
 import yaml
 
-from poketracker.models import GlobalConfig, ProductType, Retailer, WatchlistConfig, WatchlistItem
+from poketracker.models import GlobalConfig, Retailer, WatchlistConfig, WatchlistItem, parse_product_type
 
 
 class WatchlistValidationError(ValueError):
@@ -80,7 +80,7 @@ def _parse_item(raw: dict[str, Any], index: int) -> WatchlistItem:
     try:
         item_id = _require_str(raw, "id")
         retailer = Retailer(_require_str(raw, "retailer"))
-        product_type = ProductType(_require_str(raw, "type"))
+        product_type = parse_product_type(_require_str(raw, "type"))
         max_quantity = _require_int(raw, "max_quantity")
         url = _require_str(raw, "url")
         enabled = _require_bool(raw, "enabled")

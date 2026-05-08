@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from poketracker.config.watchlist import load_watchlist_file
 from poketracker.models import SellerClassification, SignalStatus, StockSignal
-from poketracker.notify.email import SesNotifier, render_decision_email
+from poketracker.notify.email import DEFAULT_FOOTER_GIF_URL, SesNotifier, render_decision_email
 from poketracker.rules.engine import RulesEngine
 
 
@@ -37,7 +37,7 @@ def main() -> None:
     subject, body, html_body = render_decision_email(
         decision,
         subject_prefix="[TEST]" if args.send_test else None,
-        footer_gif_url=args.footer_gif_url,
+        footer_gif_url=args.footer_gif_url or DEFAULT_FOOTER_GIF_URL,
     )
 
     print(f"Subject: {subject}")

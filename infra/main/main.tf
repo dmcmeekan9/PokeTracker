@@ -328,7 +328,6 @@ resource "aws_lambda_function" "checkout_webhook" {
 
   environment {
     variables = {
-      AWS_REGION                        = var.aws_region
       CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN = data.aws_secretsmanager_secret.checkout_webhook_token.arn
       CHECKOUT_PROFILE_SECRET_ARN       = data.aws_secretsmanager_secret.checkout_profile.arn
       TARGET_SESSION_SECRET_ARN         = data.aws_secretsmanager_secret.target_session.arn

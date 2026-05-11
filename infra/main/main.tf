@@ -41,6 +41,8 @@ resource "aws_ecr_repository" "checkout_webhook" {
   image_scanning_configuration {
     scan_on_push = true
   }
+
+  depends_on = [aws_iam_role_policy.github_actions]
 }
 
 resource "aws_cloudwatch_log_group" "app" {
@@ -333,6 +335,11 @@ resource "aws_lambda_function" "checkout_webhook" {
       TARGET_PLACE_ORDER_ENABLED        = tostring(var.target_place_order_enabled)
     }
   }
+
+  depends_on = [
+    aws_iam_role_policy.github_actions,
+    aws_iam_role_policy_attachment.checkout_webhook_basic,
+  ]
 }
 
 resource "aws_lambda_function_url" "checkout_webhook" {

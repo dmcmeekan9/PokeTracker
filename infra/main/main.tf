@@ -356,6 +356,14 @@ resource "aws_lambda_permission" "checkout_webhook_invoke_url" {
   function_url_auth_type = "NONE"
 }
 
+resource "aws_lambda_permission" "checkout_webhook_invoke_function" {
+  count         = local.checkout_webhook_lambda_enabled ? 1 : 0
+  statement_id  = "FunctionURLInvokeAllowPublicAccess"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.checkout_webhook[0].function_name
+  principal     = "*"
+}
+
 resource "aws_ecs_task_definition" "app" {
   family                   = local.name_prefix
   requires_compatibilities = ["FARGATE"]

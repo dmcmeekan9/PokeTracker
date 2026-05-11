@@ -101,6 +101,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "iam:TagOpenIDConnectProvider",
           "iam:TagRole",
           "iam:UpdateAssumeRolePolicy",
+          "lambda:*",
           "logs:*",
           "secretsmanager:*",
           "ses:*"

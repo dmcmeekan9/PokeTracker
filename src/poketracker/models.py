@@ -45,6 +45,8 @@ class SignalStatus(StrEnum):
 
 class DecisionType(StrEnum):
     WOULD_BUY = "WOULD_BUY"
+    PURCHASED = "PURCHASED"
+    PURCHASE_FAILED = "PURCHASE_FAILED"
     FYI_ONLY = "FYI_ONLY"
     SKIP = "SKIP"
     ERROR = "ERROR"
@@ -102,6 +104,9 @@ class Decision:
     weekly_spend_after: Decimal
     url: str
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    checkout_status: str | None = None
+    checkout_order_id: str | None = None
+    checkout_message: str | None = None
 
     @property
     def alert_key(self) -> str:

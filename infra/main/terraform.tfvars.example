@@ -1,2 +1,4 @@
-github_repository     = "YOUR_GITHUB_OWNER/PokeTracker"
-alert_recipient_email = "you@example.com"
+github_repository          = "YOUR_GITHUB_OWNER/PokeTracker"
+alert_recipient_email      = "you@example.com"
+checkout_webhook_url       = "https://checkout.example.com/purchase"
+target_place_order_enabled = false

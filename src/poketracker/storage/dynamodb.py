@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
-from boto3.dynamodb.conditions import Attr
+from boto3.dynamodb.conditions import Attr, Key
 
 from poketracker.models import (
     Decision,
@@ -110,13 +110,57 @@ class DynamoStore:
                 "weekly_spend_after": _decimal_to_wire(decision.weekly_spend_after),
                 "url": decision.url,
                 "timestamp": decision.timestamp.isoformat(),
+                "checkout_status": decision.checkout_status,
+                "checkout_order_id": decision.checkout_order_id,
+                "checkout_message": decision.checkout_message,
             },
         )
 
+    def record_purchase(self, decision: Decision, week_start_iso: str) -> None:
+        amount = decision.observed_price * decision.quantity if decision.observed_price is not None else Decimal("0")
+        purchase_id = f"{decision.timestamp.isoformat()}#{uuid.uuid4()}"
+        purchase_record = {
+            "item_id": decision.item.id,
+            "item_name": decision.item.name,
+            "retailer": decision.item.retailer.value,
+            "quantity": decision.quantity,
+            "amount": _decimal_to_wire(amount),
+            "observed_price": _decimal_to_wire(decision.observed_price) if decision.observed_price else None,
+            "checkout_status": decision.checkout_status,
+            "checkout_order_id": decision.checkout_order_id,
+            "checkout_message": decision.checkout_message,
+            "purchased_at": decision.timestamp.isoformat(),
+        }
+        self.state.put_item(
+            Item={
+                "pk": f"WEEK#{week_start_iso}",
+                "sk": f"PURCHASE#{purchase_id}",
+                **_drop_none(purchase_record),
+            }
+        )
+        self.state.put_item(
+            Item={
+                "pk": f"PURCHASED#{decision.item.id}",
+                "sk": f"WEEK#{week_start_iso}",
+                **_drop_none(purchase_record),
+            }
+        )
+
     def weekly_purchase_spend(self, week_start_iso: str) -> Decimal:
-        # V1 is dry-run only, so this remains zero until real purchases are recorded.
-        _ = week_start_iso
-        return Decimal("0")
+        key_expression = Key("pk").eq(f"WEEK#{week_start_iso}") & Key("sk").begins_with("PURCHASE#")
+        response = self.state.query(KeyConditionExpression=key_expression)
+        records = response.get("Items", [])
+        while "LastEvaluatedKey" in response:
+            response = self.state.query(
+                KeyConditionExpression=key_expression,
+                ExclusiveStartKey=response["LastEvaluatedKey"],
+            )
+            records.extend(response.get("Items", []))
+        return sum((Decimal(str(record.get("amount", "0"))) for record in records), Decimal("0"))
+
+    def item_purchased_this_week(self, item_id: str, week_start_iso: str) -> bool:
+        response = self.state.get_item(Key={"pk": f"PURCHASED#{item_id}", "sk": f"WEEK#{week_start_iso}"})
+        return "Item" in response
 
     def should_send_alert(self, decision: Decision, cooldown_seconds: int) -> bool:
         key = {"pk": decision.alert_key, "sk": "ALERT"}

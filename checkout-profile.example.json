@@ -1,0 +1,20 @@
+{
+  "contact": {
+    "email": "buyer@example.com",
+    "phone": "+15555550123"
+  },
+  "shipping_address": {
+    "name": "Buyer Name",
+    "line1": "123 Main St",
+    "line2": "Apt 4",
+    "city": "Chicago",
+    "state": "IL",
+    "postal_code": "60601",
+    "country": "US"
+  },
+  "payment": {
+    "method_type": "saved_retailer_payment",
+    "retailer_account": "target",
+    "payment_method_ref": "default"
+  }
+}

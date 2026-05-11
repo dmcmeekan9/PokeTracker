@@ -37,3 +37,32 @@ variable "email_footer_gif_url" {
   type        = string
   default     = "https://www.gifcen.com/wp-content/uploads/2023/03/-8.gif"
 }
+
+variable "checkout_webhook_url" {
+  description = "Optional external HTTPS endpoint that accepts v2 purchase requests. Leave empty to use the managed Lambda webhook."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.checkout_webhook_url == "" || startswith(var.checkout_webhook_url, "https://")
+    error_message = "checkout_webhook_url must be empty or an https:// URL."
+  }
+}
+
+variable "managed_checkout_webhook_enabled" {
+  description = "Whether to create and use the managed Lambda checkout webhook when checkout_webhook_url is empty."
+  type        = bool
+  default     = true
+}
+
+variable "target_place_order_enabled" {
+  description = "Whether the Target checkout driver is allowed to click the final place-order control."
+  type        = bool
+  default     = false
+}
+
+variable "checkout_webhook_image_uri" {
+  description = "Container image URI for the managed checkout webhook Lambda. When empty, Terraform creates only the ECR repository."
+  type        = string
+  default     = ""
+}

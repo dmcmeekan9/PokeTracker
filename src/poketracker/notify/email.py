@@ -50,6 +50,8 @@ def _fmt(value: Decimal | None) -> str:
 def _decision_label(decision: Decision) -> str:
     if decision.type == DecisionType.WOULD_BUY:
         return "BUY THIS!"
+    if decision.type == DecisionType.PURCHASE_FAILED:
+        return "PURCHASE FAILED"
     return decision.type.value
 
 
@@ -82,6 +84,9 @@ def _render_text_decision(decision: Decision) -> str:
             f"Quantity: {decision.quantity}",
             f"Weekly spend before: {_fmt(decision.weekly_spend_before)}",
             f"Weekly spend after: {_fmt(decision.weekly_spend_after)}",
+            f"Checkout status: {decision.checkout_status or 'n/a'}",
+            f"Checkout order ID: {decision.checkout_order_id or 'n/a'}",
+            f"Checkout message: {decision.checkout_message or 'n/a'}",
             f"Timestamp: {decision.timestamp.isoformat()}",
         ]
     )
@@ -101,6 +106,9 @@ def _render_html_decision(decision: Decision, footer_gif_url: str | None = None)
         ("Quantity", str(decision.quantity)),
         ("Weekly spend before", _fmt(decision.weekly_spend_before)),
         ("Weekly spend after", _fmt(decision.weekly_spend_after)),
+        ("Checkout status", decision.checkout_status or "n/a"),
+        ("Checkout order ID", decision.checkout_order_id or "n/a"),
+        ("Checkout message", decision.checkout_message or "n/a"),
         ("Timestamp", decision.timestamp.isoformat()),
     ]
     rows = "\n".join(

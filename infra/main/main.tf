@@ -2,6 +2,10 @@ locals {
   project     = "PokeTracker"
   environment = "prod"
   name_prefix = "poketracker-prod"
+  checkout_webhook_lambda_enabled = var.managed_checkout_webhook_enabled && var.checkout_webhook_image_uri != ""
+  checkout_webhook_url = var.checkout_webhook_url != "" ? var.checkout_webhook_url : (
+    local.checkout_webhook_lambda_enabled ? aws_lambda_function_url.checkout_webhook[0].function_url : ""
+  )
 
   tags = {
     Project     = local.project
@@ -23,6 +27,15 @@ data "aws_caller_identity" "current" {}
 
 resource "aws_ecr_repository" "app" {
   name                 = "${local.name_prefix}-app"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_repository" "checkout_webhook" {
+  name                 = "${local.name_prefix}-checkout-webhook"
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -107,6 +120,18 @@ resource "aws_secretsmanager_secret" "bestbuy_api_key" {
 resource "aws_secretsmanager_secret" "github_app" {
   name        = "${local.name_prefix}-github-app"
   description = "Future GitHub App credentials for bot-created pull requests."
+}
+
+data "aws_secretsmanager_secret" "checkout_webhook_token" {
+  name = "${local.name_prefix}-checkout-webhook-token"
+}
+
+data "aws_secretsmanager_secret" "checkout_profile" {
+  name = "${local.name_prefix}-checkout-profile"
+}
+
+data "aws_secretsmanager_secret" "target_session" {
+  name = "${local.name_prefix}-target-session"
 }
 
 resource "aws_vpc" "main" {
@@ -235,11 +260,103 @@ resource "aws_iam_role_policy" "task" {
         ]
         Resource = [
           aws_secretsmanager_secret.bestbuy_api_key.arn,
-          aws_secretsmanager_secret.github_app.arn
+          aws_secretsmanager_secret.github_app.arn,
+          data.aws_secretsmanager_secret.checkout_webhook_token.arn,
+          data.aws_secretsmanager_secret.checkout_profile.arn,
+          data.aws_secretsmanager_secret.target_session.arn
         ]
       }
     ]
   })
+}
+
+resource "aws_iam_role" "checkout_webhook" {
+  count = local.checkout_webhook_lambda_enabled ? 1 : 0
+  name  = "${local.name_prefix}-checkout-webhook"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "checkout_webhook_basic" {
+  count      = local.checkout_webhook_lambda_enabled ? 1 : 0
+  role       = aws_iam_role.checkout_webhook[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "checkout_webhook" {
+  count = local.checkout_webhook_lambda_enabled ? 1 : 0
+  name  = "${local.name_prefix}-checkout-webhook"
+  role  = aws_iam_role.checkout_webhook[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = [
+          data.aws_secretsmanager_secret.checkout_webhook_token.arn,
+          data.aws_secretsmanager_secret.checkout_profile.arn,
+          data.aws_secretsmanager_secret.target_session.arn
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_function" "checkout_webhook" {
+  count         = local.checkout_webhook_lambda_enabled ? 1 : 0
+  function_name = "${local.name_prefix}-checkout-webhook"
+  role          = aws_iam_role.checkout_webhook[0].arn
+  package_type  = "Image"
+  image_uri     = var.checkout_webhook_image_uri
+  timeout       = 120
+  memory_size   = 1024
+
+  environment {
+    variables = {
+      AWS_REGION                        = var.aws_region
+      CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN = data.aws_secretsmanager_secret.checkout_webhook_token.arn
+      CHECKOUT_PROFILE_SECRET_ARN       = data.aws_secretsmanager_secret.checkout_profile.arn
+      TARGET_SESSION_SECRET_ARN         = data.aws_secretsmanager_secret.target_session.arn
+      TARGET_PLACE_ORDER_ENABLED        = tostring(var.target_place_order_enabled)
+    }
+  }
+}
+
+resource "aws_lambda_function_url" "checkout_webhook" {
+  count              = local.checkout_webhook_lambda_enabled ? 1 : 0
+  function_name      = aws_lambda_function.checkout_webhook[0].function_name
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "checkout_webhook_invoke_url" {
+  count                  = local.checkout_webhook_lambda_enabled ? 1 : 0
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.checkout_webhook[0].function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
+resource "aws_lambda_permission" "checkout_webhook_invoke_function_url_only" {
+  count                    = local.checkout_webhook_lambda_enabled ? 1 : 0
+  statement_id             = "AllowPublicFunctionUrlInvokeFunction"
+  action                   = "lambda:InvokeFunction"
+  function_name            = aws_lambda_function.checkout_webhook[0].function_name
+  principal                = "*"
+  invoked_via_function_url = true
 }
 
 resource "aws_ecs_task_definition" "app" {
@@ -265,7 +382,11 @@ resource "aws_ecs_task_definition" "app" {
         { name = "ALERT_RECIPIENT_EMAIL", value = var.alert_recipient_email },
         { name = "EMAIL_FOOTER_GIF_URL", value = var.email_footer_gif_url },
         { name = "BESTBUY_API_KEY_SECRET_ARN", value = aws_secretsmanager_secret.bestbuy_api_key.arn },
-        { name = "GITHUB_APP_SECRET_ARN", value = aws_secretsmanager_secret.github_app.arn }
+        { name = "GITHUB_APP_SECRET_ARN", value = aws_secretsmanager_secret.github_app.arn },
+        { name = "CHECKOUT_WEBHOOK_URL", value = local.checkout_webhook_url },
+        { name = "CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN", value = data.aws_secretsmanager_secret.checkout_webhook_token.arn },
+        { name = "CHECKOUT_PROFILE_SECRET_ARN", value = data.aws_secretsmanager_secret.checkout_profile.arn },
+        { name = "TARGET_SESSION_SECRET_ARN", value = data.aws_secretsmanager_secret.target_session.arn }
       ]
       logConfiguration = {
         logDriver = "awslogs"

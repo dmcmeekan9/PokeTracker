@@ -2,6 +2,10 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.app.repository_url
 }
 
+output "checkout_webhook_ecr_repository_url" {
+  value = aws_ecr_repository.checkout_webhook.repository_url
+}
+
 output "github_actions_role_arn" {
   value = aws_iam_role.github_actions.arn
 }
@@ -24,4 +28,24 @@ output "bestbuy_api_key_secret_arn" {
 
 output "github_app_secret_arn" {
   value = aws_secretsmanager_secret.github_app.arn
+}
+
+output "checkout_webhook_token_secret_arn" {
+  value = data.aws_secretsmanager_secret.checkout_webhook_token.arn
+}
+
+output "checkout_profile_secret_arn" {
+  value = data.aws_secretsmanager_secret.checkout_profile.arn
+}
+
+output "target_session_secret_arn" {
+  value = data.aws_secretsmanager_secret.target_session.arn
+}
+
+output "managed_checkout_webhook_url" {
+  value = try(aws_lambda_function_url.checkout_webhook[0].function_url, "")
+}
+
+output "effective_checkout_webhook_url" {
+  value = local.checkout_webhook_url
 }

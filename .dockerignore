@@ -3,8 +3,16 @@
 .terraform
 .venv
 .pytest_cache
+.pytest_cache/
+pytest-cache-files-*
+pytest-cache-files-*/
+.uv-cache
+.uv-cache/
 __pycache__
+__pycache__/
 *.pyc
 tests
 infra
 watchlist.yaml
+checkout-profile.json
+target-session.json

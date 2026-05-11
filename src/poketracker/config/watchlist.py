@@ -75,6 +75,24 @@ def validate_enabled_urls(config: WatchlistConfig, timeout_seconds: int = 10) ->
         raise WatchlistValidationError("\n".join(failures))
 
 
+def validate_purchasing_ready(
+    config: WatchlistConfig,
+    checkout_webhook_url: str | None,
+    managed_checkout_webhook_enabled: bool = False,
+) -> None:
+    if not config.global_config.purchasing_enabled:
+        return
+    if managed_checkout_webhook_enabled:
+        return
+    if not checkout_webhook_url:
+        raise WatchlistValidationError(
+            "global.purchasing_enabled is true, but CHECKOUT_WEBHOOK_URL/--checkout-webhook-url is not configured"
+        )
+    parsed = urlparse(checkout_webhook_url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise WatchlistValidationError("checkout webhook URL must be an https URL")
+
+
 def _parse_item(raw: dict[str, Any], index: int) -> WatchlistItem:
     prefix = f"items[{index}]"
     try:

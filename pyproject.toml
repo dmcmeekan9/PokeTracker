@@ -1,7 +1,7 @@
 [project]
 name = "poketracker"
-version = "0.1.0"
-description = "MSRP-focused Pokemon card restock monitoring and dry-run purchase alerts."
+version = "2.0.0"
+description = "MSRP-focused Pokemon card restock monitoring with optional v2 purchase handoff."
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.34.0",
@@ -14,10 +14,15 @@ dev = [
     "pytest>=8.0.0",
     "responses>=0.25.0",
 ]
+checkout = [
+    "playwright>=1.48.0",
+]
 
 [project.scripts]
 poketracker = "poketracker.main:main"
 poketracker-preview-email = "poketracker.preview_email:main"
+poketracker-put-checkout-profile = "poketracker.checkout.profile:main"
+poketracker-capture-target-session = "poketracker.checkout.target_session:main"
 poketracker-validate-watchlist = "poketracker.validate_watchlist:main"
 poketracker-sync-watchlist = "poketracker.sync_watchlist:main"
 

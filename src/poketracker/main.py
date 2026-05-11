@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 
 import boto3
 from botocore.exceptions import ClientError
 
-from poketracker.checkout.dry_run import DryRunCheckoutAdapter
+from poketracker.checkout.base import CheckoutAdapter
+from poketracker.checkout.dry_run import DryRunCheckoutAdapter, UnconfiguredCheckoutAdapter
+from poketracker.checkout.http import HttpCheckoutAdapter
 from poketracker.models import DecisionType, Retailer, WatchlistItem
 from poketracker.notify.email import SesNotifier
 from poketracker.rules.engine import RulesEngine, current_week_start_iso
@@ -24,10 +27,10 @@ def main() -> None:
     bestbuy_api_key = _load_secret(os.environ.get("BESTBUY_API_KEY_SECRET_ARN"))
     store = DynamoStore()
     notifier = SesNotifier()
-    checkout = DryRunCheckoutAdapter()
 
     config = store.load_config()
     engine = RulesEngine(config.global_config)
+    checkout = _build_checkout(config.global_config.purchasing_enabled)
     adapters = _build_adapters(bestbuy_api_key)
     week_start = current_week_start_iso(config.global_config.timezone)
 
@@ -44,13 +47,29 @@ def main() -> None:
             store.record_signal(signal)
             weekly_spend = store.weekly_purchase_spend(week_start)
             decision = engine.evaluate(signal, weekly_spend)
+            if config.global_config.purchasing_enabled and decision.type == DecisionType.WOULD_BUY:
+                if store.item_purchased_this_week(item.id, week_start):
+                    decision = replace(
+                        decision,
+                        type=DecisionType.SKIP,
+                        reason="item already has a recorded v2 purchase this week",
+                        weekly_spend_after=weekly_spend,
+                    )
             decision = checkout.execute(decision)
             store.record_decision(decision)
+            if decision.type == DecisionType.PURCHASED:
+                store.record_purchase(decision, week_start)
         except Exception:
             LOGGER.exception("item failed softly: %s", item.id)
             continue
 
-        if decision.type in {DecisionType.WOULD_BUY, DecisionType.FYI_ONLY, DecisionType.ERROR}:
+        if decision.type in {
+            DecisionType.WOULD_BUY,
+            DecisionType.PURCHASED,
+            DecisionType.PURCHASE_FAILED,
+            DecisionType.FYI_ONLY,
+            DecisionType.ERROR,
+        }:
             if store.should_send_alert(decision, ALERT_COOLDOWN_SECONDS):
                 notifier.send_decision(decision)
                 LOGGER.info("sent %s alert for %s", decision.type.value, item.id)
@@ -65,6 +84,20 @@ def _build_adapters(bestbuy_api_key: str | None) -> dict[Retailer, SignalAdapter
         Retailer.TARGET: page_adapter,
         Retailer.WALMART: page_adapter,
     }
+
+
+def _build_checkout(purchasing_enabled: bool) -> CheckoutAdapter:
+    if not purchasing_enabled:
+        return DryRunCheckoutAdapter()
+    webhook_url = os.environ.get("CHECKOUT_WEBHOOK_URL")
+    if not webhook_url:
+        LOGGER.warning("purchasing_enabled=true but CHECKOUT_WEBHOOK_URL is not configured")
+        return UnconfiguredCheckoutAdapter()
+
+    bearer_token = _load_secret(os.environ.get("CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN")) or os.environ.get(
+        "CHECKOUT_WEBHOOK_TOKEN"
+    )
+    return HttpCheckoutAdapter(webhook_url=webhook_url, bearer_token=bearer_token)
 
 
 def _load_secret(secret_arn: str | None) -> str | None:

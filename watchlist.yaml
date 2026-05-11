@@ -1,5 +1,5 @@
 global:
-  purchasing_enabled: false
+  purchasing_enabled: true
   weekly_spend_cap: 150
   timezone: America/Chicago
 

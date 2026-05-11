@@ -73,6 +73,21 @@ jobs:
             -backend-config="dynamodb_table=${{ vars.TERRAFORM_LOCK_TABLE }}" \
             -backend-config="encrypt=true"
 
+      - name: Preserve checkout webhook image for base infra
+        working-directory: infra/main
+        shell: bash
+        run: |
+          checkout_webhook_repository_url="$(terraform output -raw checkout_webhook_ecr_repository_url 2>/dev/null || true)"
+          checkout_webhook_repository_name="${checkout_webhook_repository_url##*/}"
+
+          if [ -n "$checkout_webhook_repository_url" ] &&
+             aws ecr describe-images \
+               --repository-name "$checkout_webhook_repository_name" \
+               --image-ids imageTag=latest \
+               --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "TF_VAR_checkout_webhook_image_uri=${checkout_webhook_repository_url}:latest" >> "$GITHUB_ENV"
+          fi
+
       - name: Terraform apply base infra
         working-directory: infra/main
         run: terraform apply -auto-approve

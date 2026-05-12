@@ -20,6 +20,18 @@ def test_enabled_add_to_cart_button_is_in_stock() -> None:
     assert _extract_status(html) == SignalStatus.IN_STOCK
 
 
+def test_enabled_add_to_cart_button_wins_over_generic_out_of_stock_text() -> None:
+    html = '<script>{"availability_status":"OUT_OF_STOCK"}</script><button type="button">Add to cart</button>'
+
+    assert _extract_status(html) == SignalStatus.IN_STOCK
+
+
+def test_enabled_ship_it_button_is_in_stock() -> None:
+    html = '<button type="button">Ship it</button>'
+
+    assert _extract_status(html) == SignalStatus.IN_STOCK
+
+
 def test_ignores_generic_free_shipping_price() -> None:
     html = '<meta content="Free standard shipping with $35 orders.">'
 

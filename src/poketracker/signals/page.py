@@ -93,17 +93,16 @@ def _extract_price(text: str) -> Decimal | None:
 
 def _extract_status(text: str) -> SignalStatus:
     lower_text = text.lower()
-    if any(marker in lower_text for marker in ["out of stock", "sold out", "currently unavailable"]):
-        return SignalStatus.OUT_OF_STOCK
-
     for button_match in re.finditer(r"<button\b(?P<attrs>[^>]*)>(?P<label>.*?)</button>", text, re.IGNORECASE | re.DOTALL):
         attrs = button_match.group("attrs").lower()
         label = _strip_tags(unescape(button_match.group("label"))).strip().lower()
-        if label == "add to cart":
+        if label in {"add to cart", "add for shipping", "ship it"}:
             return SignalStatus.OUT_OF_STOCK if "disabled" in attrs else SignalStatus.IN_STOCK
 
     if any(marker in lower_text for marker in ["add for shipping", "ship it"]):
         return SignalStatus.IN_STOCK
+    if any(marker in lower_text for marker in ["out of stock", "sold out", "currently unavailable"]):
+        return SignalStatus.OUT_OF_STOCK
     return SignalStatus.UNKNOWN
 
 

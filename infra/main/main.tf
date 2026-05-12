@@ -410,13 +410,22 @@ resource "aws_iam_role" "eventbridge" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "events.amazonaws.com"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      },
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "scheduler.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
       }
-      Action = "sts:AssumeRole"
-    }]
+    ]
   })
 }
 
@@ -464,5 +473,49 @@ resource "aws_cloudwatch_event_target" "task" {
       subnets          = aws_subnet.public[*].id
       security_groups  = [aws_security_group.task.id]
     }
+  }
+}
+
+resource "aws_scheduler_schedule" "target_burst" {
+  for_each = {
+    "2am" = "cron(0 2 * * ? *)"
+    "3am" = "cron(0 3 * * ? *)"
+  }
+
+  name                         = "${local.name_prefix}-target-burst-${each.key}"
+  schedule_expression          = each.value
+  schedule_expression_timezone = "America/Chicago"
+  state                        = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_ecs_cluster.main.arn
+    role_arn = aws_iam_role.eventbridge.arn
+
+    ecs_parameters {
+      task_definition_arn = aws_ecs_task_definition.app.arn
+      launch_type         = "FARGATE"
+
+      network_configuration {
+        assign_public_ip = true
+        subnets          = aws_subnet.public[*].id
+        security_groups  = [aws_security_group.task.id]
+      }
+    }
+
+    input = jsonencode({
+      containerOverrides = [
+        {
+          name = "poketracker"
+          environment = [
+            { name = "POKETRACKER_BURST_DURATION_SECONDS", value = "600" },
+            { name = "POKETRACKER_BURST_INTERVAL_SECONDS", value = "10" }
+          ]
+        }
+      ]
+    })
   }
 }

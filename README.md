@@ -8,7 +8,7 @@ PokeTracker is an AWS-hosted, Terraform-managed restock monitor for manually sel
 watchlist.yaml
   -> GitHub Actions validates PRs
   -> main deploy builds/pushes container, applies Terraform, syncs DynamoDB
-  -> EventBridge runs ECS Fargate every 5 minutes
+  -> EventBridge runs ECS Fargate every minute, with 2 AM/3 AM CT burst windows
   -> app checks configured signals, applies rules, optionally submits purchase requests, sends SES email, writes audit/state events
 ```
 
@@ -44,6 +44,8 @@ The default checkout profile lives in the manually managed Secrets Manager secre
 The managed webhook includes a Target browser driver. It uses a manually captured Target session, saved Target shipping/payment, and Playwright running in a Lambda container image. It fails closed if Target asks for sign-in, MFA, CAPTCHA, a payment security code, or if `TARGET_PLACE_ORDER_ENABLED` is not `true`.
 
 Successful purchases are recorded in the state table so weekly spend caps include real purchase activity and the same item is not purchased again in the same configured week.
+
+Target restock monitoring runs every minute all day. Additional EventBridge Scheduler burst windows start at 2:00 AM and 3:00 AM America/Chicago; each burst checks repeatedly for 10 minutes with a 10-second interval.
 
 Expected webhook response fields are optional JSON:
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import replace
 
 import boto3
@@ -24,6 +25,29 @@ ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
 
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+    burst_duration_seconds = _optional_positive_int("POKETRACKER_BURST_DURATION_SECONDS")
+    burst_interval_seconds = _optional_positive_int("POKETRACKER_BURST_INTERVAL_SECONDS") or 60
+    if burst_duration_seconds:
+        _run_burst(burst_duration_seconds, burst_interval_seconds)
+        return
+
+    run_once()
+
+
+def _run_burst(duration_seconds: int, interval_seconds: int) -> None:
+    deadline = time.monotonic() + duration_seconds
+    iteration = 1
+    while True:
+        LOGGER.info("starting burst iteration %s", iteration)
+        run_once()
+        remaining_seconds = deadline - time.monotonic()
+        if remaining_seconds <= interval_seconds:
+            return
+        time.sleep(interval_seconds)
+        iteration += 1
+
+
+def run_once() -> None:
     bestbuy_api_key = _load_secret(os.environ.get("BESTBUY_API_KEY_SECRET_ARN"))
     store = DynamoStore()
     notifier = SesNotifier()
@@ -113,6 +137,21 @@ def _load_secret(secret_arn: str | None) -> str | None:
             return None
         raise
     return response.get("SecretString")
+
+
+def _optional_positive_int(name: str) -> int | None:
+    raw = os.environ.get(name)
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        LOGGER.warning("%s must be an integer; ignoring value=%r", name, raw)
+        return None
+    if value <= 0:
+        LOGGER.warning("%s must be positive; ignoring value=%r", name, raw)
+        return None
+    return value
 
 
 if __name__ == "__main__":

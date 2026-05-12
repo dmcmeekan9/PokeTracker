@@ -23,7 +23,7 @@ jobs:
       TF_VAR_target_place_order_enabled: ${{ vars.TARGET_PLACE_ORDER_ENABLED || 'true' }}
       CHECKOUT_WEBHOOK_URL: ${{ vars.CHECKOUT_WEBHOOK_URL }}
       POKETRACKER_MANAGED_CHECKOUT_WEBHOOK: "true"
-      TF_VAR_image_tag: ${{ github.sha }}
+      TF_VAR_image_tag: latest
 
     steps:
       - name: Check out repository
@@ -115,6 +115,7 @@ jobs:
           docker build -t "${{ steps.ecr.outputs.repository_url }}:${{ github.sha }}" -t "${{ steps.ecr.outputs.repository_url }}:latest" .
           docker push "${{ steps.ecr.outputs.repository_url }}:${{ github.sha }}"
           docker push "${{ steps.ecr.outputs.repository_url }}:latest"
+          echo "TF_VAR_image_tag=${{ github.sha }}" >> "$GITHUB_ENV"
 
       - name: Build and push checkout webhook image
         run: |

@@ -518,4 +518,6 @@ resource "aws_scheduler_schedule" "target_burst" {
       ]
     })
   }
+
+  depends_on = [aws_iam_role_policy.eventbridge]
 }

@@ -1,7 +1,7 @@
 locals {
-  project     = "PokeTracker"
-  environment = "prod"
-  name_prefix = "poketracker-prod"
+  project                         = "PokeTracker"
+  environment                     = "prod"
+  name_prefix                     = "poketracker-prod"
   checkout_webhook_lambda_enabled = var.managed_checkout_webhook_enabled && var.checkout_webhook_image_uri != ""
   checkout_webhook_url = var.checkout_webhook_url != "" ? var.checkout_webhook_url : (
     local.checkout_webhook_lambda_enabled ? aws_lambda_function_url.checkout_webhook[0].function_url : ""

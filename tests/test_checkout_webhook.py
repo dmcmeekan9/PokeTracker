@@ -64,6 +64,56 @@ def test_rejects_price_above_msrp(monkeypatch) -> None:
     assert json.loads(response["body"])["status"] == "price_above_msrp"
 
 
+def test_accepts_quantity_two(monkeypatch) -> None:
+    monkeypatch.setenv("CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN", "token-secret")
+    monkeypatch.setenv("CHECKOUT_PROFILE_SECRET_ARN", "profile-secret")
+    monkeypatch.setenv("TARGET_SESSION_SECRET_ARN", "session-secret")
+    raw = payload()
+    raw["quantity"] = 2
+    raw["weekly_spend_after"] = "119.98"
+    captured = []
+
+    def load_secret(secret_arn):
+        if secret_arn == "token-secret":
+            return "secret"
+        if secret_arn == "profile-secret":
+            return json.dumps(profile())
+        if secret_arn == "session-secret":
+            return json.dumps({"cookies": [], "origins": []})
+        return None
+
+    class Result:
+        status = "ordered"
+        order_id = "ABC123"
+        message = "Target checkout completed"
+        quantity = 2
+
+    def purchase_target_item(request, *_args, **_kwargs):
+        captured.append(request)
+        return Result()
+
+    monkeypatch.setattr(handler, "_load_secret", load_secret)
+    monkeypatch.setattr(handler, "purchase_target_item", purchase_target_item)
+
+    response = handler.lambda_handler(event(raw), None)
+
+    assert response["statusCode"] == 200
+    assert captured[0].quantity == 2
+    assert json.loads(response["body"])["quantity"] == 2
+
+
+def test_rejects_quantity_over_supported_limit(monkeypatch) -> None:
+    monkeypatch.setenv("CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN", "token-secret")
+    monkeypatch.setattr(handler, "_load_secret", lambda secret_arn: "secret")
+    raw = payload()
+    raw["quantity"] = 3
+
+    response = handler.lambda_handler(event(raw), None)
+
+    assert response["statusCode"] == 409
+    assert json.loads(response["body"])["status"] == "unsupported_quantity"
+
+
 def test_target_fails_when_session_secret_is_missing(monkeypatch) -> None:
     monkeypatch.setenv("CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN", "token-secret")
     monkeypatch.setenv("CHECKOUT_PROFILE_SECRET_ARN", "profile-secret")
@@ -102,6 +152,7 @@ def test_target_returns_driver_result(monkeypatch) -> None:
         status = "ordered"
         order_id = "ABC123"
         message = "Target checkout completed"
+        quantity = 1
 
     monkeypatch.setattr(handler, "_load_secret", load_secret)
     monkeypatch.setattr(handler, "purchase_target_item", lambda *args, **kwargs: Result())
@@ -112,3 +163,4 @@ def test_target_returns_driver_result(monkeypatch) -> None:
     assert response["statusCode"] == 200
     assert body["status"] == "ordered"
     assert body["order_id"] == "ABC123"
+    assert body["quantity"] == 1

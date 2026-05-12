@@ -11,6 +11,8 @@ import boto3
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 from poketracker.checkout_webhook.target_driver import purchase_target_item
 
+MAX_PURCHASE_QUANTITY = 2
+
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     _ = context
@@ -60,8 +62,12 @@ def _purchase_request(payload: dict[str, Any]) -> PurchaseRequest:
         raise CheckoutWebhookError(400, "bad_request", "item must be an object")
 
     quantity = _int(payload.get("quantity"), "quantity")
-    if quantity != 1:
-        raise CheckoutWebhookError(409, "unsupported_quantity", "checkout webhook only supports quantity 1")
+    if quantity < 1 or quantity > MAX_PURCHASE_QUANTITY:
+        raise CheckoutWebhookError(
+            409,
+            "unsupported_quantity",
+            f"checkout webhook only supports quantities 1-{MAX_PURCHASE_QUANTITY}",
+        )
 
     observed_price = _money(payload.get("observed_price"), "observed_price")
     msrp = _money(payload.get("msrp"), "msrp")
@@ -114,6 +120,7 @@ def _execute_purchase(request: PurchaseRequest, profile: dict[str, Any]) -> dict
         "status": result.status,
         "order_id": result.order_id,
         "message": result.message,
+        "quantity": result.quantity,
     }
 
 

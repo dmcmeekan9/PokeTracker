@@ -10,6 +10,8 @@ import yaml
 
 from poketracker.models import GlobalConfig, Retailer, WatchlistConfig, WatchlistItem, parse_product_type
 
+MAX_PURCHASE_QUANTITY = 2
+
 
 class WatchlistValidationError(ValueError):
     pass
@@ -109,8 +111,8 @@ def _parse_item(raw: dict[str, Any], index: int) -> WatchlistItem:
 
     if not item_id:
         raise WatchlistValidationError(f"{prefix}.id must not be empty")
-    if max_quantity != 1:
-        raise WatchlistValidationError(f"{prefix}.max_quantity must be 1")
+    if max_quantity < 1 or max_quantity > MAX_PURCHASE_QUANTITY:
+        raise WatchlistValidationError(f"{prefix}.max_quantity must be between 1 and {MAX_PURCHASE_QUANTITY}")
     _validate_url(url, f"{prefix}.url")
 
     msrp = _decimal(raw.get("msrp"), f"{prefix}.msrp")

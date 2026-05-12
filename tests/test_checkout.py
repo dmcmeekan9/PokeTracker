@@ -29,7 +29,8 @@ class Response:
         return self._data
 
 
-def decision() -> Decision:
+def decision(quantity: int = 1) -> Decision:
+    observed_price = Decimal("59.99")
     return Decision(
         type=DecisionType.WOULD_BUY,
         item=WatchlistItem(
@@ -39,17 +40,17 @@ def decision() -> Decision:
             url="https://www.target.com/p/example/-/A-95082118",
             type=ProductType.ETB,
             msrp=Decimal("59.99"),
-            max_quantity=1,
+            max_quantity=quantity,
             enabled=True,
             sku="95082118",
         ),
         reason="would buy",
-        observed_price=Decimal("59.99"),
+        observed_price=observed_price,
         msrp=Decimal("59.99"),
         seller=SellerClassification.RETAILER,
-        quantity=1,
+        quantity=quantity,
         weekly_spend_before=Decimal("0"),
-        weekly_spend_after=Decimal("59.99"),
+        weekly_spend_after=observed_price * quantity,
         url="https://www.target.com/p/example/-/A-95082118",
     )
 
@@ -71,6 +72,27 @@ def test_http_checkout_posts_purchase_payload(monkeypatch) -> None:
     assert calls[0]["headers"]["Authorization"] == "Bearer secret"
     assert calls[0]["json"]["item"]["id"] == "target-ascended-heroes-etb"
     assert calls[0]["json"]["observed_price"] == "59.99"
+
+
+def test_http_checkout_records_actual_quantity(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "requests.post",
+        lambda *args, **kwargs: Response(
+            200,
+            {
+                "status": "ordered",
+                "order_id": "ABC123",
+                "message": "confirmed",
+                "quantity": 1,
+            },
+        ),
+    )
+
+    result = HttpCheckoutAdapter("https://checkout.example.com/purchase").execute(decision(quantity=2))
+
+    assert result.type == DecisionType.PURCHASED
+    assert result.quantity == 1
+    assert result.weekly_spend_after == Decimal("59.99")
 
 
 def test_http_checkout_records_rejection(monkeypatch) -> None:

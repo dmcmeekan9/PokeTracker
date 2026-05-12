@@ -48,10 +48,16 @@ class HttpCheckoutAdapter(CheckoutAdapter):
         order_id = _first_str(data, "order_id", "orderId", "confirmation_number", "confirmationNumber")
         status = _first_str(data, "status") or "accepted"
         checkout_message = _first_str(data, "message") or message
+        quantity = _first_int(data, "quantity", "quantity_purchased", "purchased_quantity") or decision.quantity
+        weekly_spend_after = decision.weekly_spend_after
+        if decision.observed_price is not None:
+            weekly_spend_after = decision.weekly_spend_before + (decision.observed_price * quantity)
         return replace(
             decision,
             type=DecisionType.PURCHASED,
             reason="purchased: checkout webhook accepted the order request",
+            quantity=quantity,
+            weekly_spend_after=weekly_spend_after,
             checkout_status=status,
             checkout_order_id=order_id,
             checkout_message=checkout_message,
@@ -100,6 +106,20 @@ def _first_str(data: dict[str, Any], *keys: str) -> str | None:
         value = data.get(key)
         if value is not None:
             return str(value)
+    return None
+
+
+def _first_int(data: dict[str, Any], *keys: str) -> int | None:
+    for key in keys:
+        value = data.get(key)
+        if value is None:
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            return parsed
     return None
 
 

@@ -14,6 +14,7 @@ class TargetCheckoutResult:
     status: str
     order_id: str | None
     message: str
+    quantity: int
 
 
 def purchase_target_item(
@@ -51,6 +52,7 @@ def purchase_target_item(
             if "cart" not in page.url and "checkout" not in page.url:
                 page.goto("https://www.target.com/cart", wait_until="domcontentloaded", timeout=30000)
             _stop_on_intervention(page.content())
+            actual_quantity = _set_target_quantity(page, request.quantity)
             _click_first(page, [r"checkout", r"sign in to check out"], "checkout", optional=True)
             _stop_on_intervention(page.content())
             _verify_checkout_profile_visible(page.content(), profile)
@@ -67,10 +69,14 @@ def purchase_target_item(
             confirmation_html = page.content()
             _stop_on_intervention(confirmation_html)
             order_id = _extract_order_id(confirmation_html)
+            message = "Target checkout completed"
+            if actual_quantity != request.quantity:
+                message = f"Target checkout completed with quantity {actual_quantity}; requested {request.quantity}"
             return TargetCheckoutResult(
                 status="ordered",
                 order_id=order_id,
-                message="Target checkout completed",
+                message=message,
+                quantity=actual_quantity,
             )
         except PlaywrightTimeoutError as exc:
             raise CheckoutWebhookError(504, "target_timeout", f"Target checkout timed out: {exc}") from exc
@@ -97,6 +103,44 @@ def _click_first(page: Any, labels: list[str], step: str, optional: bool = False
     if optional:
         return
     raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
+
+
+def _set_target_quantity(page: Any, quantity: int) -> int:
+    if quantity == 1:
+        return 1
+
+    desired = str(quantity)
+    selectors = [
+        'select[aria-label*="quantity" i]',
+        'select[name*="quantity" i]',
+        'select[id*="quantity" i]',
+        "select",
+    ]
+    for selector in selectors:
+        locator = page.locator(selector)
+        try:
+            count = min(locator.count(), 10)
+        except Exception:
+            continue
+        for index in range(count):
+            try:
+                locator.nth(index).select_option(desired, timeout=3000)
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+                return quantity
+            except Exception:
+                continue
+
+    increment_clicks = quantity - 1
+    try:
+        for _ in range(increment_clicks):
+            _click_first(
+                page,
+                [r"increase quantity", r"add one", r"increment quantity", r"quantity increase", r"^\+$"],
+                "quantity_increment",
+            )
+        return quantity
+    except CheckoutWebhookError:
+        return 1
 
 
 def _stop_on_intervention(html: str) -> None:

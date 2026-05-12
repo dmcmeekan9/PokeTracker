@@ -49,12 +49,28 @@ class RulesEngine:
             )
 
         if weekly_spend_after > self.global_config.weekly_spend_cap:
+            remaining_spend = self.global_config.weekly_spend_cap - weekly_spend_before
+            affordable_quantity = int(remaining_spend // observed_price)
+            if affordable_quantity >= 1:
+                quantity = min(quantity, affordable_quantity)
+                candidate_spend = observed_price * quantity
+                weekly_spend_after = weekly_spend_before + candidate_spend
+                action = "would buy" if self.global_config.purchasing_enabled else "dry-run would buy"
+                return self._decision(
+                    signal,
+                    DecisionType.WOULD_BUY,
+                    f"{action}: price <= MSRP, seller is retailer, and weekly cap allows quantity {quantity}",
+                    weekly_spend_before,
+                    weekly_spend_after,
+                    quantity,
+                )
             return self._decision(
                 signal,
                 DecisionType.SKIP,
                 "weekly spend cap would be exceeded",
                 weekly_spend_before,
                 weekly_spend_after,
+                quantity,
             )
 
         action = "would buy" if self.global_config.purchasing_enabled else "dry-run would buy"
@@ -64,6 +80,7 @@ class RulesEngine:
             f"{action}: price <= MSRP, seller is retailer, and weekly cap allows it",
             weekly_spend_before,
             weekly_spend_after,
+            quantity,
         )
 
     @staticmethod
@@ -73,6 +90,7 @@ class RulesEngine:
         reason: str,
         weekly_spend_before: Decimal,
         weekly_spend_after: Decimal,
+        quantity: int | None = None,
     ) -> Decision:
         return Decision(
             type=decision_type,
@@ -81,7 +99,7 @@ class RulesEngine:
             observed_price=signal.observed_price,
             msrp=signal.item.msrp,
             seller=signal.seller,
-            quantity=signal.item.max_quantity,
+            quantity=quantity or signal.item.max_quantity,
             weekly_spend_before=weekly_spend_before,
             weekly_spend_after=weekly_spend_after,
             url=signal.item.url,

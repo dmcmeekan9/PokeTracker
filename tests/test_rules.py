@@ -14,7 +14,7 @@ from poketracker.models import (
 from poketracker.rules.engine import RulesEngine
 
 
-def item() -> WatchlistItem:
+def item(max_quantity: int = 1) -> WatchlistItem:
     return WatchlistItem(
         id="bestbuy-sample-etb",
         name="Sample ETB",
@@ -22,7 +22,7 @@ def item() -> WatchlistItem:
         url="https://www.bestbuy.com/site/sample/123.p",
         type=ProductType.ETB,
         msrp=Decimal("49.99"),
-        max_quantity=1,
+        max_quantity=max_quantity,
         enabled=True,
         sku="123",
     )
@@ -85,6 +85,36 @@ def test_allows_price_below_msrp() -> None:
     decision = engine().evaluate(signal, weekly_spend_before=Decimal("0"))
 
     assert decision.type.value == "WOULD_BUY"
+
+
+def test_quantity_two_counts_against_weekly_cap() -> None:
+    signal = StockSignal(
+        item=item(max_quantity=2),
+        status=SignalStatus.IN_STOCK,
+        observed_price=Decimal("49.99"),
+        seller=SellerClassification.RETAILER,
+    )
+
+    decision = engine().evaluate(signal, weekly_spend_before=Decimal("0"))
+
+    assert decision.type.value == "WOULD_BUY"
+    assert decision.quantity == 2
+    assert decision.weekly_spend_after == Decimal("99.98")
+
+
+def test_uses_affordable_quantity_when_two_would_exceed_cap() -> None:
+    signal = StockSignal(
+        item=item(max_quantity=2),
+        status=SignalStatus.IN_STOCK,
+        observed_price=Decimal("49.99"),
+        seller=SellerClassification.RETAILER,
+    )
+
+    decision = engine().evaluate(signal, weekly_spend_before=Decimal("100.01"))
+
+    assert decision.type.value == "WOULD_BUY"
+    assert decision.quantity == 1
+    assert decision.weekly_spend_after == Decimal("150.00")
 
 
 def test_third_party_is_fyi_only() -> None:

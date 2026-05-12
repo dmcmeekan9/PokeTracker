@@ -51,7 +51,8 @@ Expected webhook response fields are optional JSON:
 {
   "status": "ordered",
   "order_id": "ABC123",
-  "message": "confirmed"
+  "message": "confirmed",
+  "quantity": 1
 }
 ```
 

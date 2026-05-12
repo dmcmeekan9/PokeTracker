@@ -52,11 +52,20 @@ def test_rejects_duplicate_ids() -> None:
         parse_watchlist(raw)
 
 
-def test_rejects_quantity_over_one() -> None:
+def test_accepts_quantity_two() -> None:
     raw = base_watchlist()
     raw["items"][0]["max_quantity"] = 2
 
-    with pytest.raises(WatchlistValidationError, match="max_quantity must be 1"):
+    config = parse_watchlist(raw)
+
+    assert config.items[0].max_quantity == 2
+
+
+def test_rejects_quantity_over_supported_limit() -> None:
+    raw = base_watchlist()
+    raw["items"][0]["max_quantity"] = 3
+
+    with pytest.raises(WatchlistValidationError, match="max_quantity must be between 1 and 2"):
         parse_watchlist(raw)
 
 

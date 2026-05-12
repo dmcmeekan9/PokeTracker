@@ -1,6 +1,6 @@
 global:
   purchasing_enabled: true
-  weekly_spend_cap: 150
+  weekly_spend_cap: 300
   timezone: America/Chicago
 
 items:
@@ -10,7 +10,7 @@ items:
     url: "https://www.target.com/p/pok--233-mon-trading-card-game--mega-evolution--8212--ascended-heroes-elite-trainer-box/-/A-95082118"
     type: ETB
     msrp: 59.99
-    max_quantity: 1
+    max_quantity: 2
     enabled: true
     sku: "95082118"
 
@@ -20,7 +20,7 @@ items:
     url: "https://www.target.com/p/pok--233-mon-trading-card-game--mega-evolution-ascended-heroes-booster-bundle/-/A-95120834"
     type: BB
     msrp: 29.99
-    max_quantity: 1
+    max_quantity: 2
     enabled: true
     sku: "95120834"
 
@@ -30,7 +30,7 @@ items:
     url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-destined-rivals-elite-trainer-box/-/A-94300069"
     type: ETB
     msrp: 54.99
-    max_quantity: 1
+    max_quantity: 2
     enabled: true
     sku: "94300069"
 
@@ -40,7 +40,7 @@ items:
     url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-destined-rivals-booster-bundle/-/A-94300067"
     type: BB
     msrp: 29.99
-    max_quantity: 1
+    max_quantity: 2
     enabled: true
     sku: "94300067"
 
@@ -50,7 +50,7 @@ items:
     url: "https://www.target.com/p/pok--233-mon-trading-card-game--scarlet---38--violet--8212-prismatic-evolutions-elite-trainer-box/-/A-1011206804"
     type: ETB
     msrp: 69.99
-    max_quantity: 1
+    max_quantity: 2
     enabled: true
     sku: "1011206804"
 
@@ -59,8 +59,8 @@ items:
     retailer: target
     url: "https://www.target.com/p/pok--233-mon-trading-card-game--scarlet---38--violet--8212-prismatic-evolutions-booster-bundle/-/A-93954446"
     type: BB
-    msrp: 29.99
-    max_quantity: 1
+    msrp: 31.99
+    max_quantity: 2
     enabled: true
     sku: "93954446"
 
@@ -70,7 +70,7 @@ items:
     url: "https://www.target.com/p/pok-233-mon-trading-card-game-mega-evolution-chaos-rising-elite-trainer-box/-/A-95267143"
     type: ETB
     msrp: 59.99
-    max_quantity: 1
+    max_quantity: 2
     enabled: true
     sku: "95267143"
 
@@ -80,7 +80,7 @@ items:
     url: "https://www.target.com/p/pok--233-mon-trading-card-game--mega-evolution-chaos-rising-booster-bundle/-/A-95298172"
     type: BB
     msrp: 29.99
-    max_quantity: 1
+    max_quantity: 2
     enabled: true
     sku: "95298172"
   

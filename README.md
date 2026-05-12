@@ -45,7 +45,7 @@ The managed webhook includes a Target browser driver. It uses a manually capture
 
 Successful purchases are recorded in the state table so weekly spend caps include real purchase activity and the same item is not purchased again in the same configured week.
 
-Target restock monitoring runs every minute all day. Additional EventBridge Scheduler burst windows start at 2:00 AM and 3:00 AM America/Chicago; each burst checks repeatedly for 10 minutes with a 10-second interval.
+Target restock monitoring runs every minute all day. Additional EventBridge burst windows currently start at 2:00 AM and 3:00 AM Central Daylight Time; each burst checks repeatedly for 10 minutes with a 10-second interval.
 
 Expected webhook response fields are optional JSON:
 

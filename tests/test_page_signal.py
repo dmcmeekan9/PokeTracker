@@ -65,6 +65,90 @@ def test_target_in_stock_uses_msrp_when_price_is_deferred(monkeypatch) -> None:
     assert signal.seller == SellerClassification.RETAILER
 
 
+def test_target_redsky_fulfillment_overrides_disabled_server_button(monkeypatch) -> None:
+    html = (
+        '<script>window.__CONFIG__ = JSON.parse("{\\"services\\":{\\"redsky\\":'
+        '{\\"baseUrl\\":\\"https://redsky.target.com\\",\\"apiKey\\":\\"test-key\\"}}}")</script>'
+        '<script id="__NEXT_DATA__" type="application/json">{"visitor_id":"visitor-1"}</script>'
+        '<button type="button" disabled="">Add to cart</button>'
+    )
+    calls = []
+
+    class PageResponse:
+        status_code = 200
+        text = html
+
+    class FulfillmentResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {
+                "data": {
+                    "product": {
+                        "fulfillment": {
+                            "sold_out": False,
+                            "shipping_options": {
+                                "availability_status": "IN_STOCK",
+                                "available_to_promise_quantity": 10,
+                            },
+                        }
+                    }
+                }
+            }
+
+    def get(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        if "redsky_aggregations" in url:
+            return FulfillmentResponse()
+        return PageResponse()
+
+    monkeypatch.setattr("requests.get", get)
+
+    signal = RetailerPageSignalAdapter().check(item(sku="95045259"))
+
+    assert signal.status == SignalStatus.IN_STOCK
+    assert signal.observed_price == Decimal("59.99")
+    assert calls[1]["headers"]["x-api-key"] == "test-key"
+    assert calls[1]["params"]["tcin"] == "95045259"
+
+
+def test_target_redsky_out_of_stock_keeps_item_out_of_stock(monkeypatch) -> None:
+    html = (
+        '<script>window.__CONFIG__ = JSON.parse("{\\"services\\":{\\"redsky\\":'
+        '{\\"baseUrl\\":\\"https://redsky.target.com\\",\\"apiKey\\":\\"test-key\\"}}}")</script>'
+        '<button type="button" disabled="">Add to cart</button>'
+    )
+
+    class PageResponse:
+        status_code = 200
+        text = html
+
+    class FulfillmentResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {
+                "data": {
+                    "product": {
+                        "fulfillment": {
+                            "sold_out": True,
+                            "shipping_options": {"availability_status": "OUT_OF_STOCK"},
+                        }
+                    }
+                }
+            }
+
+    monkeypatch.setattr(
+        "requests.get",
+        lambda url, **kwargs: FulfillmentResponse() if "redsky_aggregations" in url else PageResponse(),
+    )
+
+    signal = RetailerPageSignalAdapter().check(item(sku="95045259"))
+
+    assert signal.status == SignalStatus.OUT_OF_STOCK
+    assert signal.observed_price is None
+
+
 def test_target_in_stock_signal_becomes_would_buy(monkeypatch) -> None:
     from poketracker.models import GlobalConfig
     from poketracker.rules.engine import RulesEngine
@@ -105,7 +189,7 @@ def test_target_timeout_retries_and_becomes_unknown(monkeypatch) -> None:
     assert "transient network failure" in (signal.message or "")
 
 
-def item() -> WatchlistItem:
+def item(sku: str = "95082118") -> WatchlistItem:
     return WatchlistItem(
         id="target-ascended-heroes-etb",
         name="Target: Ascended Heroes Elite Trainer Box",
@@ -115,5 +199,5 @@ def item() -> WatchlistItem:
         msrp=Decimal("59.99"),
         max_quantity=1,
         enabled=True,
-        sku="95082118",
+        sku=sku,
     )

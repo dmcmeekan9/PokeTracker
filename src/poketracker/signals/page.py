@@ -4,6 +4,7 @@ import re
 import time
 from decimal import Decimal, InvalidOperation
 from html import unescape
+from urllib.parse import quote
 
 import requests
 
@@ -44,6 +45,10 @@ class RetailerPageSignalAdapter(SignalAdapter):
 
         seller, seller_name = _classify_seller(item, body)
         observed_price = _extract_price(response.text)
+        if item.retailer.value == "target" and item.sku:
+            target_status = self._target_fulfillment_status(item, response.text)
+            if target_status != SignalStatus.UNKNOWN:
+                status = target_status
         if observed_price is None and item.retailer.value == "target" and status == SignalStatus.IN_STOCK:
             observed_price = item.msrp
 
@@ -69,6 +74,47 @@ class RetailerPageSignalAdapter(SignalAdapter):
         if last_exc is not None:
             raise last_exc
         raise RuntimeError("page request was not attempted")
+
+    def _target_fulfillment_status(self, item: WatchlistItem, html: str) -> SignalStatus:
+        api_key = _extract_target_redsky_api_key(html)
+        visitor_id = _extract_target_visitor_id(html)
+        if not api_key:
+            return SignalStatus.UNKNOWN
+
+        params = {
+            "tcin": item.sku,
+            "store_id": "1767",
+            "zip": "50023",
+            "state": "IA",
+            "latitude": "41.73",
+            "longitude": "-93.58",
+            "scheduled_delivery_store_id": "1767",
+            "pricing_store_id": "1767",
+            "has_pricing_store_id": "true",
+            "channel": "WEB",
+            "page": f"/p/A-{item.sku}",
+        }
+        if visitor_id:
+            params["visitor_id"] = visitor_id
+
+        try:
+            response = requests.get(
+                "https://redsky.target.com/redsky_aggregations/v1/web/product_fulfillment_v1",
+                params=params,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "Mozilla/5.0",
+                    "x-api-key": api_key,
+                },
+                timeout=self.timeout_seconds,
+            )
+            if response.status_code != 200:
+                return SignalStatus.UNKNOWN
+            payload = response.json()
+        except (ValueError, requests.RequestException):
+            return SignalStatus.UNKNOWN
+
+        return _extract_target_fulfillment_status(payload)
 
 
 def _extract_price(text: str) -> Decimal | None:
@@ -104,6 +150,71 @@ def _extract_status(text: str) -> SignalStatus:
     if any(marker in lower_text for marker in ["out of stock", "sold out", "currently unavailable"]):
         return SignalStatus.OUT_OF_STOCK
     return SignalStatus.UNKNOWN
+
+
+def _extract_target_redsky_api_key(text: str) -> str | None:
+    patterns = [
+        r'\\"redsky\\":\{\\"baseUrl\\":\\"https://redsky\.target\.com\\".*?\\"apiKey\\":\\"([^"\\]+)\\"',
+        r'"redsky":\{"baseUrl":"https://redsky\.target\.com".*?"apiKey":"([^"]+)"',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _extract_target_visitor_id(text: str) -> str | None:
+    patterns = [
+        r'\\"visitor_id\\":\\"([^"\\]+)\\"',
+        r'"visitor_id":"([^"]+)"',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return quote(match.group(1), safe="")
+    return None
+
+
+def _extract_target_fulfillment_status(payload: dict) -> SignalStatus:
+    product = payload.get("data", {}).get("product", {})
+    fulfillment = product.get("fulfillment", {}) if isinstance(product, dict) else {}
+    if not isinstance(fulfillment, dict):
+        return SignalStatus.UNKNOWN
+
+    shipping = fulfillment.get("shipping_options", {})
+    if isinstance(shipping, dict) and _availability_is_in_stock(shipping.get("availability_status")):
+        return SignalStatus.IN_STOCK
+
+    for store in fulfillment.get("store_options", []) or []:
+        if not isinstance(store, dict):
+            continue
+        for key in ("order_pickup", "in_store_only", "ship_to_store"):
+            option = store.get(key, {})
+            if isinstance(option, dict) and _availability_is_in_stock(option.get("availability_status")):
+                return SignalStatus.IN_STOCK
+
+    if fulfillment.get("sold_out") is True or fulfillment.get("is_out_of_stock_in_all_store_locations") is True:
+        return SignalStatus.OUT_OF_STOCK
+
+    statuses: list[str] = []
+    if isinstance(shipping, dict) and shipping.get("availability_status"):
+        statuses.append(str(shipping["availability_status"]))
+    for store in fulfillment.get("store_options", []) or []:
+        if not isinstance(store, dict):
+            continue
+        for key in ("order_pickup", "in_store_only", "ship_to_store"):
+            option = store.get(key, {})
+            if isinstance(option, dict) and option.get("availability_status"):
+                statuses.append(str(option["availability_status"]))
+    if statuses and all(status.upper() in {"OUT_OF_STOCK", "UNAVAILABLE"} for status in statuses):
+        return SignalStatus.OUT_OF_STOCK
+
+    return SignalStatus.UNKNOWN
+
+
+def _availability_is_in_stock(value: object) -> bool:
+    return isinstance(value, str) and value.upper() in {"IN_STOCK", "LIMITED_STOCK", "AVAILABLE"}
 
 
 def _strip_tags(value: str) -> str:

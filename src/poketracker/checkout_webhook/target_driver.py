@@ -144,21 +144,33 @@ def _set_target_quantity(page: Any, quantity: int) -> int:
 
 
 def _stop_on_intervention(html: str) -> None:
-    lowered = html.lower()
-    interventions = {
-        "captcha": "captcha",
-        "verify it's you": "identity_verification",
-        "verification code": "identity_verification",
-        "two-factor": "identity_verification",
-        "sign in to your target account": "sign_in_required",
-        "sign in to check out": "sign_in_required",
-        "enter your password": "sign_in_required",
-        "payment method": "payment_intervention",
-        "security code": "payment_intervention",
-        "cvv": "payment_intervention",
-    }
-    for marker, status in interventions.items():
-        if marker in lowered:
+    normalized = re.sub(r"\s+", " ", html.lower())
+    interventions = [
+        ("captcha", r"\bcaptcha\b"),
+        ("captcha", r"verify you(?:'| a)?re (?:a )?human"),
+        ("captcha", r"not a robot"),
+        ("captcha", r"\brecaptcha\b"),
+        ("identity_verification", r"verify it(?:'| i)?s you"),
+        ("identity_verification", r"verification code"),
+        ("identity_verification", r"two[- ]factor"),
+        ("identity_verification", r"multi[- ]factor"),
+        ("identity_verification", r"one[- ]time (?:passcode|password|code)"),
+        ("sign_in_required", r"sign in to your target account"),
+        ("sign_in_required", r"sign in to check out"),
+        ("sign_in_required", r"enter your password"),
+        ("sign_in_required", r"password is required"),
+        ("sign_in_required", r"email or mobile phone"),
+        ("payment_intervention", r"enter (?:the )?(?:card )?security code"),
+        ("payment_intervention", r"\bcvv\b"),
+        ("payment_intervention", r"\bcvc\b"),
+        ("payment_intervention", r"select (?:a )?payment method"),
+        ("payment_intervention", r"add (?:a )?payment method"),
+        ("payment_intervention", r"update (?:your )?payment"),
+        ("payment_intervention", r"payment (?:could not|can't|cannot|was not) (?:be )?(?:authorized|processed|verified)"),
+        ("payment_intervention", r"card (?:declined|was declined|could not be verified)"),
+    ]
+    for status, pattern in interventions:
+        if re.search(pattern, normalized, re.IGNORECASE):
             raise CheckoutWebhookError(409, status, f"Target checkout requires intervention: {status}")
 
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError
-from poketracker.checkout_webhook.target_driver import _set_target_quantity
+from poketracker.checkout_webhook.target_driver import _set_target_quantity, _stop_on_intervention
 
 
 class EmptyLocator:
@@ -57,3 +59,25 @@ def test_quantity_two_uses_select_when_available() -> None:
 
     assert _set_target_quantity(page, 2) == 2
     assert page.select.selected == "2"
+
+
+@pytest.mark.parametrize(
+    ("html", "status"),
+    [
+        ("<main>Verify you are human before continuing</main>", "captcha"),
+        ("<main>Enter your password to continue</main>", "sign_in_required"),
+        ("<main>We sent a verification code</main>", "identity_verification"),
+        ("<main>Enter card security code</main>", "payment_intervention"),
+        ("<main>Select a payment method</main>", "payment_intervention"),
+        ("<main>Your card was declined</main>", "payment_intervention"),
+    ],
+)
+def test_stops_on_checkout_interventions(html: str, status: str) -> None:
+    with pytest.raises(CheckoutWebhookError) as exc_info:
+        _stop_on_intervention(html)
+
+    assert exc_info.value.status == status
+
+
+def test_saved_payment_label_is_not_intervention() -> None:
+    _stop_on_intervention("<main>Payment method Visa ending in 4242</main>")

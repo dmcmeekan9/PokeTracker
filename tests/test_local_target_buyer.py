@@ -93,8 +93,10 @@ def test_purchase_target_item_from_cdp_uses_attached_browser(monkeypatch) -> Non
     monkeypatch.setattr(local_target_buyer, "_stop_on_intervention", lambda html: None)
     monkeypatch.setattr(local_target_buyer, "_click_first", lambda page, labels, step, optional=False: True)
     monkeypatch.setattr(local_target_buyer, "_page_indicates_cart_has_item", lambda html: False)
+    monkeypatch.setattr(local_target_buyer, "_select_standard_shipping", lambda page: None)
     monkeypatch.setattr(local_target_buyer, "_set_target_quantity", lambda page, quantity: quantity)
-    monkeypatch.setattr(local_target_buyer, "_verify_checkout_profile_visible", lambda html, profile: None)
+    monkeypatch.setattr(local_target_buyer, "_wait_for_checkout_ready", lambda page, profile: None)
+    monkeypatch.setattr(local_target_buyer, "_verify_checkout_profile_visible", lambda html, profile, *args: None)
     monkeypatch.setattr(local_target_buyer, "_extract_order_id", lambda html: "ABC123")
 
     request = PurchaseRequest(
@@ -117,4 +119,51 @@ def test_purchase_target_item_from_cdp_uses_attached_browser(monkeypatch) -> Non
     assert result.status == "ordered"
     assert result.order_id == "ABC123"
     assert result.quantity == 2
+    assert browser.closed is True
+
+
+def test_purchase_target_item_from_cdp_verify_only_stops_before_order(monkeypatch) -> None:
+    page = FakePage()
+    browser = FakeBrowser(FakeContext(page))
+    fake_sync_api = types.ModuleType("playwright.sync_api")
+    fake_sync_api.TimeoutError = RuntimeError
+    fake_sync_api.sync_playwright = lambda: FakePlaywrightManager(browser)
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_api)
+    monkeypatch.setattr(local_target_buyer, "_page_content", lambda page: "<main>ready</main>")
+    monkeypatch.setattr(local_target_buyer, "_stop_on_intervention", lambda html: None)
+    monkeypatch.setattr(local_target_buyer, "_click_first", lambda page, labels, step, optional=False: True)
+    monkeypatch.setattr(local_target_buyer, "_page_indicates_cart_has_item", lambda html: False)
+    monkeypatch.setattr(local_target_buyer, "_select_standard_shipping", lambda page: None)
+    monkeypatch.setattr(local_target_buyer, "_set_target_quantity", lambda page, quantity: quantity)
+    monkeypatch.setattr(local_target_buyer, "_wait_for_checkout_ready", lambda page, profile: None)
+    monkeypatch.setattr(local_target_buyer, "_verify_checkout_profile_visible", lambda html, profile, *args: None)
+    verified = {}
+    monkeypatch.setattr(
+        local_target_buyer,
+        "_verify_click_candidate_present",
+        lambda page, labels, step: verified.update({"step": step}),
+    )
+
+    request = PurchaseRequest(
+        item_id="target-item",
+        item_name="Target Item",
+        retailer="target",
+        sku="95045259",
+        url="https://www.target.com/p/example",
+        quantity=1,
+        observed_price=Decimal("14.99"),
+        msrp=Decimal("14.99"),
+    )
+    result = local_target_buyer.purchase_target_item_from_cdp(
+        "http://127.0.0.1:9222",
+        request,
+        {"shipping_address": {"postal_code": "50023"}},
+        place_order_enabled=False,
+        verify_only=True,
+    )
+
+    assert result.status == "ready_to_place_order"
+    assert result.order_id is None
+    assert verified == {"step": "place_order"}
     assert browser.closed is True

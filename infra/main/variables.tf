@@ -61,6 +61,42 @@ variable "target_place_order_enabled" {
   default     = false
 }
 
+variable "target_session_refresh_enabled" {
+  description = "Whether to create the managed Lambda that refreshes the Target browser session inside AWS."
+  type        = bool
+  default     = true
+}
+
+variable "target_session_refresh_schedule_expression" {
+  description = "EventBridge schedule for the managed Target session refresh Lambda. Leave empty to disable the schedule."
+  type        = string
+  default     = "cron(45 6,7 * * ? *)"
+}
+
+variable "target_session_verify_url" {
+  description = "Optional Target product URL opened during the managed AWS session refresh to preflight the cart/session state."
+  type        = string
+  default     = ""
+}
+
+variable "target_checkout_browser_enabled" {
+  description = "Whether to create a persistent EC2-hosted Chrome session for Target checkout and point the managed webhook at it over private CDP."
+  type        = bool
+  default     = false
+}
+
+variable "target_checkout_browser_instance_type" {
+  description = "EC2 instance type for the persistent Target Chrome checkout browser."
+  type        = string
+  default     = "t3a.small"
+}
+
+variable "target_checkout_browser_volume_size" {
+  description = "Root EBS volume size in GiB for the persistent Target Chrome checkout browser profile."
+  type        = number
+  default     = 20
+}
+
 variable "checkout_webhook_image_uri" {
   description = "Container image URI for the managed checkout webhook Lambda. When empty, Terraform creates only the ECR repository."
   type        = string

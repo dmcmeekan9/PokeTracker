@@ -8,6 +8,8 @@ from typing import Any
 
 import boto3
 
+from poketracker.checkout.target_storage_state import encode_storage_state_for_secret
+from poketracker.checkout.local_target_buyer import purchase_target_item_from_cdp
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 from poketracker.checkout_webhook.target_driver import purchase_target_item
 
@@ -20,8 +22,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         _authorize(event)
         payload = _event_json(event)
         request = _purchase_request(payload)
+        verify_only = _bool(payload.get("verify_only", False), "verify_only")
         profile = _load_checkout_profile()
-        result = _execute_purchase(request, profile)
+        result = _execute_purchase(request, profile, verify_only=verify_only)
     except CheckoutWebhookError as exc:
         return _json_response(exc.status_code, {"status": exc.status, "message": exc.message})
     except Exception as exc:
@@ -99,7 +102,7 @@ def _load_checkout_profile() -> dict[str, Any]:
     return data
 
 
-def _execute_purchase(request: PurchaseRequest, profile: dict[str, Any]) -> dict[str, str | None]:
+def _execute_purchase(request: PurchaseRequest, profile: dict[str, Any], *, verify_only: bool = False) -> dict[str, Any]:
     if request.retailer != "target":
         raise CheckoutWebhookError(409, "unsupported_retailer", f"retailer is not supported yet: {request.retailer}")
 
@@ -111,11 +114,25 @@ def _execute_purchase(request: PurchaseRequest, profile: dict[str, Any]) -> dict
     if payment.get("retailer_account") != "target":
         raise CheckoutWebhookError(409, "unsupported_payment", "checkout profile payment retailer_account must be target")
 
-    result = purchase_target_item(
-        request,
-        profile,
-        target_session_json=_load_secret(os.environ.get("TARGET_SESSION_SECRET_ARN")),
-    )
+    target_cdp_url = os.environ.get("TARGET_CDP_URL")
+    if target_cdp_url:
+        result = purchase_target_item_from_cdp(
+            target_cdp_url,
+            request,
+            profile,
+            place_order_enabled=_target_place_order_enabled(),
+            verify_only=verify_only,
+        )
+    else:
+        result = purchase_target_item(
+            request,
+            profile,
+            target_session_json=_load_secret(os.environ.get("TARGET_SESSION_SECRET_ARN")),
+            verify_only=verify_only,
+        )
+        storage_state = getattr(result, "storage_state", None)
+        if storage_state:
+            _store_target_session(storage_state)
     return {
         "status": result.status,
         "order_id": result.order_id,
@@ -133,6 +150,21 @@ def _load_secret(secret_arn: str | None) -> str | None:
     except client.exceptions.ResourceNotFoundException:
         return None
     return response.get("SecretString")
+
+
+def _store_target_session(storage_state: dict[str, Any]) -> None:
+    secret_arn = os.environ.get("TARGET_SESSION_SECRET_ARN")
+    if not secret_arn:
+        return
+    client = boto3.client("secretsmanager", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+    client.put_secret_value(
+        SecretId=secret_arn,
+        SecretString=encode_storage_state_for_secret(storage_state),
+    )
+
+
+def _target_place_order_enabled() -> bool:
+    return os.environ.get("TARGET_PLACE_ORDER_ENABLED", "").lower() in {"1", "true", "yes"}
 
 
 def _json_response(status_code: int, payload: dict[str, Any]) -> dict[str, Any]:
@@ -153,6 +185,12 @@ def _int(value: Any, field: str) -> int:
     if not isinstance(value, int):
         raise CheckoutWebhookError(400, "bad_request", f"{field} must be an integer")
     return value
+
+
+def _bool(value: Any, field: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    raise CheckoutWebhookError(400, "bad_request", f"{field} must be a boolean")
 
 
 def _money(value: Any, field: str) -> Decimal:

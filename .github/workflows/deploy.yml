@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      refresh_target_session_now:
+        description: "Invoke the AWS Target session refresh Lambda after deploy"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   id-token: write
@@ -21,6 +28,12 @@ jobs:
       TF_VAR_email_footer_gif_url: ${{ vars.EMAIL_FOOTER_GIF_URL || 'https://www.gifcen.com/wp-content/uploads/2023/03/-8.gif' }}
       TF_VAR_checkout_webhook_url: ${{ vars.CHECKOUT_WEBHOOK_URL }}
       TF_VAR_target_place_order_enabled: ${{ vars.TARGET_PLACE_ORDER_ENABLED || 'false' }}
+      TF_VAR_target_session_refresh_enabled: ${{ vars.TARGET_SESSION_REFRESH_ENABLED || 'true' }}
+      TF_VAR_target_session_refresh_schedule_expression: ${{ vars.TARGET_SESSION_REFRESH_SCHEDULE_EXPRESSION || 'cron(45 6,7 * * ? *)' }}
+      TF_VAR_target_session_verify_url: ${{ vars.TARGET_SESSION_VERIFY_URL }}
+      TF_VAR_target_checkout_browser_enabled: ${{ vars.TARGET_CHECKOUT_BROWSER_ENABLED || 'true' }}
+      TF_VAR_target_checkout_browser_instance_type: ${{ vars.TARGET_CHECKOUT_BROWSER_INSTANCE_TYPE || 't3a.small' }}
+      TF_VAR_target_checkout_browser_volume_size: ${{ vars.TARGET_CHECKOUT_BROWSER_VOLUME_SIZE || '20' }}
       CHECKOUT_WEBHOOK_URL: ${{ vars.CHECKOUT_WEBHOOK_URL }}
       POKETRACKER_MANAGED_CHECKOUT_WEBHOOK: "true"
       TF_VAR_image_tag: latest
@@ -127,6 +140,23 @@ jobs:
       - name: Terraform apply image tag
         working-directory: infra/main
         run: terraform apply -auto-approve
+
+      - name: Refresh Target session now
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_target_session_now }}
+        working-directory: infra/main
+        shell: bash
+        run: |
+          function_name="$(terraform output -raw target_session_refresh_function_name)"
+          if [ -z "$function_name" ]; then
+            echo "Target session refresh function is not enabled; skipping."
+            exit 0
+          fi
+          aws lambda invoke \
+            --function-name "$function_name" \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{}' \
+            target-session-refresh-response.json
+          cat target-session-refresh-response.json
 
       - name: Sync watchlist to DynamoDB
         env:

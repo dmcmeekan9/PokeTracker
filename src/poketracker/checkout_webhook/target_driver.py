@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from poketracker.checkout.target_storage_state import decode_storage_state_secret
@@ -21,12 +23,22 @@ class TargetCheckoutResult:
     order_id: str | None
     message: str
     quantity: int
+    storage_state: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class TargetSessionRefreshResult:
+    status: str
+    message: str
+    storage_state: dict[str, Any]
 
 
 def purchase_target_item(
     request: PurchaseRequest,
     profile: dict[str, Any],
     target_session_json: str | None,
+    *,
+    verify_only: bool = False,
 ) -> TargetCheckoutResult:
     if not target_session_json:
         raise CheckoutWebhookError(503, "target_session_missing", "Target session secret is not configured")
@@ -44,14 +56,7 @@ def purchase_target_item(
 
     place_order_enabled = os.environ.get("TARGET_PLACE_ORDER_ENABLED", "").lower() in {"1", "true", "yes"}
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-dev-shm-usage",
-                "--no-sandbox",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        )
+        browser = _launch_target_browser(playwright)
         context = _new_target_context(browser, storage_state)
         page = context.new_page()
         try:
@@ -64,14 +69,27 @@ def purchase_target_item(
                         "target_add_to_cart_not_found",
                         "Target checkout could not find the add_to_cart control",
                     )
-            _click_first(page, [r"view cart", r"checkout", r"cart"], "cart_or_checkout", optional=True)
+            _click_first(page, [r"view cart", r"checkout", r"check\s*out", r"cart"], "cart_or_checkout", optional=True)
             if "cart" not in page.url and "checkout" not in page.url:
                 page.goto("https://www.target.com/cart", wait_until="domcontentloaded", timeout=30000)
             _stop_on_intervention(_page_content(page))
+            _select_standard_shipping(page)
             actual_quantity = _set_target_quantity(page, request.quantity)
-            _click_first(page, [r"checkout", r"sign in to check out"], "checkout", optional=True)
+            _click_first(page, [r"checkout", r"check\s*out", r"sign in to check out"], "checkout", optional=True)
+            _wait_for_checkout_ready(page, profile)
             _stop_on_intervention(_page_content(page))
-            _verify_checkout_profile_visible(_page_content(page), profile)
+
+            if verify_only:
+                _verify_click_candidate_present(page, [r"place your order", r"place order", r"submit order"], "place_order")
+                return TargetCheckoutResult(
+                    status="ready_to_place_order",
+                    order_id=None,
+                    message="Target checkout reached the final place-order control; no order was placed",
+                    quantity=actual_quantity,
+                    storage_state=context.storage_state(),
+                )
+
+            _verify_checkout_profile_visible(_page_content(page), profile, page)
 
             if not place_order_enabled:
                 raise CheckoutWebhookError(
@@ -93,12 +111,68 @@ def purchase_target_item(
                 order_id=order_id,
                 message=message,
                 quantity=actual_quantity,
+                storage_state=context.storage_state(),
             )
         except PlaywrightTimeoutError as exc:
             raise CheckoutWebhookError(504, "target_timeout", f"Target checkout timed out: {exc}") from exc
         finally:
             context.close()
             browser.close()
+
+
+def refresh_target_session(
+    target_session_json: str | None,
+    verify_url: str | None = None,
+) -> TargetSessionRefreshResult:
+    if not target_session_json:
+        raise CheckoutWebhookError(503, "target_session_missing", "Target session secret is not configured")
+
+    try:
+        storage_state = decode_storage_state_secret(target_session_json)
+    except ValueError as exc:
+        raise CheckoutWebhookError(503, "target_session_invalid", str(exc)) from exc
+
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise CheckoutWebhookError(503, "driver_dependency_missing", "Playwright is not installed for the checkout webhook") from exc
+
+    with sync_playwright() as playwright:
+        browser = _launch_target_browser(playwright)
+        context = _new_target_context(browser, storage_state)
+        page = context.new_page()
+        try:
+            page.goto("https://www.target.com/account", wait_until="domcontentloaded", timeout=30000)
+            _stop_on_intervention(_page_content(page))
+            if verify_url:
+                page.goto(verify_url, wait_until="domcontentloaded", timeout=30000)
+                _stop_on_intervention(_page_content(page))
+            refreshed_state = context.storage_state()
+            message = "Target session refreshed in AWS"
+            if verify_url:
+                message = "Target session refreshed in AWS after Target preflight verification"
+            return TargetSessionRefreshResult(
+                status="refreshed",
+                message=message,
+                storage_state=refreshed_state,
+            )
+        except PlaywrightTimeoutError as exc:
+            raise CheckoutWebhookError(504, "target_timeout", f"Target session refresh timed out: {exc}") from exc
+        finally:
+            context.close()
+            browser.close()
+
+
+def _launch_target_browser(playwright: Any) -> Any:
+    return playwright.chromium.launch(
+        headless=True,
+        args=[
+            "--disable-dev-shm-usage",
+            "--no-sandbox",
+            "--disable-blink-features=AutomationControlled",
+        ],
+    )
 
 
 def _new_target_context(browser: Any, storage_state: dict[str, Any]) -> Any:
@@ -136,6 +210,22 @@ def _click_first(page: Any, labels: list[str], step: str, optional: bool = False
         page.wait_for_timeout(500)
     if optional:
         return False
+    _write_debug_artifacts(page, step)
+    raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
+
+
+def _verify_click_candidate_present(page: Any, labels: list[str], step: str) -> None:
+    deadline = time.monotonic() + 25
+    while time.monotonic() < deadline:
+        for candidate in _click_candidates(page, labels, step):
+            try:
+                candidate.first.wait_for(state="visible", timeout=1000)
+                return
+            except Exception:
+                continue
+        _stop_on_intervention(_page_content(page))
+        page.wait_for_timeout(500)
+    _write_debug_artifacts(page, step)
     raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
 
 
@@ -158,6 +248,24 @@ def _click_candidates(page: Any, labels: list[str], step: str) -> list[Any]:
             ]
         )
     return candidates
+
+
+def _select_standard_shipping(page: Any) -> None:
+    locator = page.locator('input[type="radio"][id$="-shipping"][value="STANDARD"]')
+    try:
+        count = min(locator.count(), 10)
+    except Exception:
+        return
+    for index in range(count):
+        candidate = locator.nth(index)
+        try:
+            if candidate.is_checked(timeout=1000):
+                continue
+            candidate.check(timeout=5000, force=True)
+            page.wait_for_load_state("domcontentloaded", timeout=10000)
+            page.wait_for_timeout(1000)
+        except Exception:
+            continue
 
 
 def _set_target_quantity(page: Any, quantity: int) -> int:
@@ -249,12 +357,72 @@ def _page_content(page: Any) -> str:
     raise CheckoutWebhookError(504, "target_timeout", f"Target checkout could not read page content: {last_exc}")
 
 
-def _verify_checkout_profile_visible(html: str, profile: dict[str, Any]) -> None:
+def _wait_for_checkout_ready(page: Any, profile: dict[str, Any]) -> None:
+    postal_code = ""
+    shipping = profile.get("shipping_address") if isinstance(profile, dict) else None
+    if isinstance(shipping, dict):
+        postal_code = str(shipping.get("postal_code", "")).strip()
+
+    deadline = time.monotonic() + 45
+    while time.monotonic() < deadline:
+        html = _page_content(page)
+        _stop_on_intervention(html)
+        text = _page_text(page)
+        normalized = re.sub(r"\s+", " ", text.lower())
+        if postal_code and postal_code in text:
+            return
+        if re.search(r"place\s+(?:your\s+)?order|submit\s+order|order summary|payment", normalized):
+            return
+        page.wait_for_timeout(1000)
+
+
+def _page_text(page: Any) -> str:
+    try:
+        return page.locator("body").inner_text(timeout=3000)
+    except Exception:
+        return ""
+
+
+def _write_debug_artifacts(page: Any, step: str) -> None:
+    output_dir = os.environ.get("TARGET_CHECKOUT_DEBUG_DIR")
+    if not output_dir:
+        return
+    try:
+        path = Path(output_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        html = _page_content(page)
+        buttons = []
+        try:
+            buttons = page.locator("button").all_inner_texts(timeout=3000)
+        except Exception:
+            buttons = []
+        links = []
+        try:
+            links = page.locator("a").all_inner_texts(timeout=3000)
+        except Exception:
+            links = []
+        metadata = {
+            "step": step,
+            "url": getattr(page, "url", None),
+            "title": page.title(),
+            "buttons": buttons,
+            "links": links,
+        }
+        (path / f"{step}.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        (path / f"{step}.html").write_text(html, encoding="utf-8")
+        page.screenshot(path=str(path / f"{step}.png"), full_page=True, timeout=5000)
+    except Exception:
+        return
+
+
+def _verify_checkout_profile_visible(html: str, profile: dict[str, Any], page: Any | None = None) -> None:
     shipping = profile.get("shipping_address") if isinstance(profile, dict) else None
     if not isinstance(shipping, dict):
         raise CheckoutWebhookError(503, "profile_invalid", "checkout profile shipping_address is missing")
     postal_code = str(shipping.get("postal_code", "")).strip()
     if postal_code and postal_code not in html:
+        if page is not None:
+            _write_debug_artifacts(page, "shipping_profile")
         raise CheckoutWebhookError(
             409,
             "shipping_not_confirmed",

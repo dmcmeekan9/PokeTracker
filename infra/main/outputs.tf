@@ -46,6 +46,22 @@ output "managed_checkout_webhook_url" {
   value = try(aws_lambda_function_url.checkout_webhook[0].function_url, "")
 }
 
+output "target_session_refresh_function_name" {
+  value = try(aws_lambda_function.target_session_refresh[0].function_name, "")
+}
+
+output "target_checkout_browser_instance_id" {
+  value = try(aws_instance.target_checkout_browser[0].id, "")
+}
+
+output "target_checkout_browser_private_ip" {
+  value = try(aws_instance.target_checkout_browser[0].private_ip, "")
+}
+
+output "target_checkout_browser_cdp_url" {
+  value = try("http://${aws_instance.target_checkout_browser[0].private_ip}:9222", "")
+}
+
 output "effective_checkout_webhook_url" {
   value = local.checkout_webhook_url
 }

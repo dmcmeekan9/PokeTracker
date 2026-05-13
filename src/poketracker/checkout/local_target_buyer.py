@@ -22,8 +22,11 @@ from poketracker.checkout_webhook.target_driver import (
     _page_content,
     _page_indicates_cart_has_item,
     _set_target_quantity,
+    _select_standard_shipping,
     _stop_on_intervention,
+    _verify_click_candidate_present,
     _verify_checkout_profile_visible,
+    _wait_for_checkout_ready,
 )
 from poketracker.config.watchlist import load_watchlist_file
 from poketracker.models import DecisionType, Retailer, SellerClassification
@@ -59,6 +62,11 @@ def main() -> None:
         help="Optional Target product URL to open during session refresh. Defaults to the first enabled Target item.",
     )
     parser.add_argument("--place-order", action="store_true", help="Allow clicking Target's final place-order button.")
+    parser.add_argument(
+        "--verify-only",
+        action="store_true",
+        help="Stop after confirming the final Target place-order control is visible.",
+    )
     parser.add_argument("--once", action="store_true", help="Run one pass and exit.")
     args = parser.parse_args()
 
@@ -104,7 +112,13 @@ def main() -> None:
                 msrp=item.msrp,
             )
             try:
-                result = purchase_target_item_from_cdp(args.cdp_url, request, profile, place_order_enabled=args.place_order)
+                result = purchase_target_item_from_cdp(
+                    args.cdp_url,
+                    request,
+                    profile,
+                    place_order_enabled=args.place_order,
+                    verify_only=args.verify_only or not args.place_order,
+                )
             except CheckoutWebhookError as exc:
                 print(f"{item.id}: checkout failed {exc.status} - {exc.message}", flush=True)
                 continue
@@ -125,6 +139,7 @@ def purchase_target_item_from_cdp(
     profile: dict[str, Any],
     *,
     place_order_enabled: bool,
+    verify_only: bool = False,
 ) -> TargetCheckoutResult:
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -147,14 +162,30 @@ def purchase_target_item_from_cdp(
                             "target_add_to_cart_not_found",
                             "Target checkout could not find the add_to_cart control",
                         )
-                _click_first(page, [r"view cart", r"checkout", r"cart"], "cart_or_checkout", optional=True)
+                _click_first(page, [r"view cart", r"checkout", r"check\s*out", r"cart"], "cart_or_checkout", optional=True)
                 if "cart" not in page.url and "checkout" not in page.url:
                     page.goto("https://www.target.com/cart", wait_until="domcontentloaded", timeout=30000)
                 _stop_on_intervention(_page_content(page))
+                _select_standard_shipping(page)
                 actual_quantity = _set_target_quantity(page, request.quantity)
-                _click_first(page, [r"checkout", r"sign in to check out"], "checkout", optional=True)
+                _click_first(page, [r"checkout", r"check\s*out", r"sign in to check out"], "checkout", optional=True)
+                _wait_for_checkout_ready(page, profile)
                 _stop_on_intervention(_page_content(page))
-                _verify_checkout_profile_visible(_page_content(page), profile)
+
+                if verify_only:
+                    _verify_click_candidate_present(
+                        page,
+                        [r"place your order", r"place order", r"submit order"],
+                        "place_order",
+                    )
+                    return TargetCheckoutResult(
+                        status="ready_to_place_order",
+                        order_id=None,
+                        message="local Target checkout reached the final place-order control; no order was placed",
+                        quantity=actual_quantity,
+                    )
+
+                _verify_checkout_profile_visible(_page_content(page), profile, page)
 
                 if not place_order_enabled:
                     raise CheckoutWebhookError(

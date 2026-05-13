@@ -8,6 +8,7 @@ from poketracker.checkout_webhook.target_driver import (
     _page_indicates_cart_has_item,
     _set_target_quantity,
     _stop_on_intervention,
+    _verify_click_candidate_present,
     purchase_target_item,
 )
 
@@ -93,6 +94,48 @@ def test_saved_payment_label_is_not_intervention() -> None:
 def test_detects_item_already_in_cart() -> None:
     assert _page_indicates_cart_has_item('<span aria-label="cart">1 in cart</span>')
     assert not _page_indicates_cart_has_item("<main>Your cart is empty</main>")
+
+
+class VisibleControl:
+    clicked = False
+    waited = False
+
+    @property
+    def first(self) -> "VisibleControl":
+        return self
+
+    def wait_for(self, state: str, timeout: int) -> None:
+        assert state == "visible"
+        assert timeout == 1000
+        self.waited = True
+
+    def click(self, *args, **kwargs) -> None:
+        _ = args
+        _ = kwargs
+        self.clicked = True
+
+
+class PageWithVisiblePlaceOrder:
+    def __init__(self) -> None:
+        self.control = VisibleControl()
+
+    def get_by_role(self, role: str, name) -> VisibleControl:
+        _ = role
+        _ = name
+        return self.control
+
+    def get_by_text(self, pattern) -> VisibleControl:
+        _ = pattern
+        return self.control
+
+
+def test_verify_click_candidate_present_does_not_click() -> None:
+    page = PageWithVisiblePlaceOrder()
+
+    _verify_click_candidate_present(page, [r"place order"], "place_order")
+
+    assert page.control.waited is True
+    assert page.control.clicked is False
 
 
 def test_large_target_session_secret_round_trips_with_encoding() -> None:

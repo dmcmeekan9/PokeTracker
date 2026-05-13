@@ -32,6 +32,12 @@ Optional:
 
 - `CHECKOUT_WEBHOOK_URL` for an external webhook instead of the managed Lambda webhook
 - `TARGET_PLACE_ORDER_ENABLED` set to `true` only when the Target driver is allowed to click the final place-order button
+- `TARGET_SESSION_REFRESH_ENABLED` default: `true`
+- `TARGET_SESSION_REFRESH_SCHEDULE_EXPRESSION` default: `cron(45 6,7 * * ? *)`
+- `TARGET_SESSION_VERIFY_URL` optional Target URL opened by the managed AWS session refresher
+- `TARGET_CHECKOUT_BROWSER_ENABLED` default: `true`, creates an EC2-hosted persistent Chrome session for Target checkout
+- `TARGET_CHECKOUT_BROWSER_INSTANCE_TYPE` default: `t3a.small`
+- `TARGET_CHECKOUT_BROWSER_VOLUME_SIZE` default: `20`
 
 ## V2 Purchasing
 
@@ -41,7 +47,17 @@ The webhook receives item, price, quantity, and weekly spend context. A successf
 
 The default checkout profile lives in the manually managed Secrets Manager secret named `poketracker-prod-checkout-profile`, also exposed by the `checkout_profile_secret_arn` Terraform output. It supports shipping/contact details plus either a saved retailer payment reference or a payment token reference. It intentionally rejects raw card numbers, CVV/CVC, and expiration fields.
 
-The managed webhook includes a Target browser driver. It uses a manually captured Target session, saved Target shipping/payment, and Playwright running in a Lambda container image. It fails closed if Target asks for sign-in, MFA, CAPTCHA, a payment security code, or if `TARGET_PLACE_ORDER_ENABLED` is not `true`.
+The managed webhook includes a Target browser driver. It uses a manually captured Target session, saved Target shipping/payment, and Playwright running in a Lambda container image. Successful AWS checkout runs write the refreshed Target cookies back to Secrets Manager automatically. The driver still fails closed if Target asks for sign-in, MFA, CAPTCHA, a payment security code, or if `TARGET_PLACE_ORDER_ENABLED` is not `true`.
+
+For a no-purchase readiness proof, send the checkout webhook payload with `"verify_only": true` or run the local verifier below. In verify-only mode the driver must reach and see the final Target place-order control, then returns `ready_to_place_order` without clicking it. Normal monitor-triggered purchase requests do not set this flag, so a disabled final order click still fails closed and is not recorded as purchased.
+
+Terraform also creates a managed `target-session-refresh` Lambda by default. It opens a headless Target browser in AWS, reloads the stored session, optionally opens `TARGET_SESSION_VERIFY_URL`, and writes the refreshed cookies back to Secrets Manager. The default schedule runs at `cron(45 6,7 * * ? *)`, which is 1:45 AM and 2:45 AM in Central Daylight Time.
+
+The deploy workflow can also be run manually from GitHub Actions with the `refresh_target_session_now` input set to `true`. That path deploys the latest code, then invokes the AWS refresh Lambda immediately so you can verify the stored Target session without waiting for the scheduled window.
+
+When `TARGET_CHECKOUT_BROWSER_ENABLED` is true, Terraform also creates a private EC2-hosted Chrome session and points the managed checkout webhook at it with `TARGET_CDP_URL`. The webhook still receives the synchronous purchase request, validates the bearer token/profile/price, then drives the persistent Chrome profile over the private VPC network. Chrome's remote debugging port is not public; it only accepts traffic from the checkout Lambda security group. Use SSM port forwarding to reach the VNC session when you need to sign in or clear a Target prompt.
+
+The default hosted browser is intentionally small: `t3a.small`, 20 GiB gp3, one public IPv4 address for outbound internet/SSM, and a single-AZ Secrets Manager VPC endpoint for the checkout Lambda. In `us-east-1`, that is roughly mid-$20s/month always-on before small data and log charges.
 
 Successful purchases are recorded in the state table so weekly spend caps include real purchase activity and the same item is not purchased again in the same configured week.
 
@@ -90,7 +106,51 @@ python -m poketracker.checkout.target_session `
 
 Use the browser window to clear CAPTCHA/sign-in/payment prompts and confirm the page/cart state is usable before pressing Enter in the terminal. The checkout driver intentionally fails closed if Target presents CAPTCHA, MFA, sign-in, payment verification, or another intervention to the unattended Lambda session.
 
-For a local-browser overnight burst, keep the machine awake and use an already-open debug Chrome profile. This is the fallback path when the local browser session is more reliable than Lambda for a Target drop:
+Once that session is uploaded, the managed AWS refresher can keep it warm without leaving a local machine awake overnight. If Target starts challenging the unattended AWS browser again, refresh the session from a trusted real browser and re-upload it.
+
+Verify a no-purchase checkout locally with the captured session:
+
+```powershell
+$env:PYTHONPATH = "src"
+uv run poketracker-verify-target-checkout --item-id target-ascended-heroes-etb
+```
+
+If the watchlist item is not currently buyable, use an in-stock Target product or category URL for the checkout proof:
+
+```powershell
+$env:PYTHONPATH = "src"
+uv run poketracker-verify-target-checkout `
+  --url "https://www.target.com/s/toothpaste" `
+  --item-name "Target checkout verification item"
+```
+
+To prove the same flow through an already-open signed-in Chrome session:
+
+```powershell
+.\scripts\start_target_debug_chrome.ps1
+$env:PYTHONPATH = "src"
+uv run poketracker-verify-target-checkout `
+  --cdp-url "http://127.0.0.1:9222" `
+  --url "https://www.target.com/p/-/A-92285103" `
+  --item-name "Target checkout verification item"
+```
+
+The expected successful output is a JSON object with `"status":"ready_to_place_order"`. Any sign-in, CAPTCHA, MFA, payment, or shipping mismatch response means the Target session/profile needs manual attention before unattended purchasing can be trusted.
+
+For the EC2-hosted Chrome session, deploy first, then open a private VNC tunnel through SSM:
+
+```powershell
+cd infra/main
+$instanceId = terraform output -raw target_checkout_browser_instance_id
+aws ssm start-session `
+  --target $instanceId `
+  --document-name AWS-StartPortForwardingSession `
+  --parameters portNumber=5901,localPortNumber=5901
+```
+
+Connect a local VNC client to `127.0.0.1:5901`, sign in to Target in the hosted Chrome window, confirm saved payment/shipping, then run a verify-only webhook test before enabling final ordering.
+
+For a local-browser overnight burst, keep the machine awake and use an already-open debug Chrome profile. This is now the fallback path only when the AWS checkout/session refresh path is still being challenged by Target:
 
 ```powershell
 .\scripts\start_target_debug_chrome.ps1

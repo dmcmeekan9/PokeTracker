@@ -35,13 +35,28 @@ def main() -> None:
         "--cdp-url",
         help="Connect to an already-open Chrome/Edge remote debugging URL and capture its current Target session.",
     )
+    parser.add_argument(
+        "--no-prompt",
+        action="store_true",
+        help="Capture immediately without waiting for terminal input. Use only after the attached browser is ready.",
+    )
     args = parser.parse_args()
 
     try:
         if args.cdp_url:
-            storage_state = capture_target_session_from_cdp(args.output, args.cdp_url, verify_url=args.verify_url)
+            storage_state = capture_target_session_from_cdp(
+                args.output,
+                args.cdp_url,
+                verify_url=args.verify_url,
+                prompt=not args.no_prompt,
+            )
         else:
-            storage_state = capture_target_session(args.output, verify_url=args.verify_url, browser_channel=args.browser_channel)
+            storage_state = capture_target_session(
+                args.output,
+                verify_url=args.verify_url,
+                browser_channel=args.browser_channel,
+                prompt=not args.no_prompt,
+            )
     except RuntimeError as exc:
         print(f"target session capture failed:\n{exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -57,6 +72,7 @@ def capture_target_session(
     output_path: str | Path,
     verify_url: str | None = None,
     browser_channel: str = "chromium",
+    prompt: bool = True,
 ) -> dict[str, Any]:
     try:
         from playwright.sync_api import sync_playwright
@@ -71,13 +87,15 @@ def capture_target_session(
         context = browser.new_context()
         page = context.new_page()
         page.goto("https://www.target.com/account", wait_until="domcontentloaded", timeout=60000)
-        print("Sign in to Target in the browser window, confirm your default shipping/payment, then return here.")
-        input("Press Enter after the Target account page shows you are signed in...")
+        if prompt:
+            print("Sign in to Target in the browser window, confirm your default shipping/payment, then return here.")
+            input("Press Enter after the Target account page shows you are signed in...")
         if verify_url:
             page.goto(verify_url, wait_until="domcontentloaded", timeout=60000)
-            print("Target preflight page opened.")
-            print("Clear any CAPTCHA/challenge, confirm the page shows the account/cart state you expect, then return here.")
-            input("Press Enter after the Target product/cart page is usable without intervention...")
+            if prompt:
+                print("Target preflight page opened.")
+                print("Clear any CAPTCHA/challenge, confirm the page shows the account/cart state you expect, then return here.")
+                input("Press Enter after the Target product/cart page is usable without intervention...")
         storage_state = context.storage_state()
         browser.close()
 
@@ -89,6 +107,7 @@ def capture_target_session_from_cdp(
     output_path: str | Path,
     cdp_url: str,
     verify_url: str | None = None,
+    prompt: bool = True,
 ) -> dict[str, Any]:
     try:
         from playwright.sync_api import sync_playwright
@@ -103,8 +122,9 @@ def capture_target_session_from_cdp(
             if verify_url:
                 page.goto(verify_url, wait_until="domcontentloaded", timeout=60000)
                 print("Target preflight page opened in the attached browser.")
-            print("Use the attached browser to clear any Target prompts and confirm the page/cart state is usable.")
-            input("Press Enter after Target is usable without intervention...")
+            if prompt:
+                print("Use the attached browser to clear any Target prompts and confirm the page/cart state is usable.")
+                input("Press Enter after Target is usable without intervention...")
             storage_state = context.storage_state()
         finally:
             browser.close()

@@ -90,7 +90,7 @@ gh variable set TARGET_PLACE_ORDER_ENABLED --body "true"
 2. Configure `infra/main/terraform.tfvars` from `infra/main/terraform.tfvars.example`.
 3. Apply `infra/main` once from a trusted local/admin AWS session to create the GitHub OIDC role.
 4. Add the `github_actions_role_arn` output as the GitHub Actions variable `AWS_ROLE_ARN`.
-5. Verify SES identities sent to `poketrackerx@proton.me` and your recipient email.
+5. Verify SES identities sent to `poketracker@proton.me` and your recipient email.
 6. Put the Best Buy API key into the Secrets Manager secret created by Terraform.
 
 ## Branch Protection

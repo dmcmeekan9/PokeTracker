@@ -21,10 +21,20 @@ def main() -> None:
         help="Optional Secrets Manager secret id or ARN to upload after capture.",
     )
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-east-1"), help="AWS region.")
+    parser.add_argument(
+        "--verify-url",
+        help="Optional Target product URL to open after sign-in so you can clear any challenge before upload.",
+    )
+    parser.add_argument(
+        "--browser-channel",
+        choices=["chromium", "chrome", "msedge"],
+        default="chromium",
+        help="Browser channel to use for the manual session capture.",
+    )
     args = parser.parse_args()
 
     try:
-        storage_state = capture_target_session(args.output)
+        storage_state = capture_target_session(args.output, verify_url=args.verify_url, browser_channel=args.browser_channel)
     except RuntimeError as exc:
         print(f"target session capture failed:\n{exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -39,19 +49,31 @@ def main() -> None:
         print(f"target session saved to {args.output}")
 
 
-def capture_target_session(output_path: str | Path) -> dict[str, Any]:
+def capture_target_session(
+    output_path: str | Path,
+    verify_url: str | None = None,
+    browser_channel: str = "chromium",
+) -> dict[str, Any]:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise RuntimeError("Playwright is required. Install it with: python -m pip install playwright") from exc
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
+        launch_options: dict[str, Any] = {"headless": False}
+        if browser_channel != "chromium":
+            launch_options["channel"] = browser_channel
+        browser = playwright.chromium.launch(**launch_options)
         context = browser.new_context()
         page = context.new_page()
         page.goto("https://www.target.com/account", wait_until="domcontentloaded", timeout=60000)
         print("Sign in to Target in the browser window, confirm your default shipping/payment, then return here.")
         input("Press Enter after the Target account page shows you are signed in...")
+        if verify_url:
+            page.goto(verify_url, wait_until="domcontentloaded", timeout=60000)
+            print("Target preflight page opened.")
+            print("Clear any CAPTCHA/challenge, confirm the page shows the account/cart state you expect, then return here.")
+            input("Press Enter after the Target product/cart page is usable without intervention...")
         storage_state = context.storage_state()
         browser.close()
 

@@ -4,7 +4,12 @@ import pytest
 
 from poketracker.checkout.target_storage_state import decode_storage_state_secret, encode_storage_state_for_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError
-from poketracker.checkout_webhook.target_driver import _set_target_quantity, _stop_on_intervention, purchase_target_item
+from poketracker.checkout_webhook.target_driver import (
+    _page_indicates_cart_has_item,
+    _set_target_quantity,
+    _stop_on_intervention,
+    purchase_target_item,
+)
 
 
 class EmptyLocator:
@@ -83,6 +88,11 @@ def test_stops_on_checkout_interventions(html: str, status: str) -> None:
 
 def test_saved_payment_label_is_not_intervention() -> None:
     _stop_on_intervention("<main>Payment method Visa ending in 4242</main>")
+
+
+def test_detects_item_already_in_cart() -> None:
+    assert _page_indicates_cart_has_item('<span aria-label="cart">1 in cart</span>')
+    assert not _page_indicates_cart_has_item("<main>Your cart is empty</main>")
 
 
 def test_large_target_session_secret_round_trips_with_encoding() -> None:

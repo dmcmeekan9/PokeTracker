@@ -78,6 +78,18 @@ python -m poketracker.checkout.target_session --secret-id poketracker-prod-targe
 
 When the browser opens, sign in to Target, make sure the account has the correct default shipping address and saved payment method, then return to the terminal and press Enter. The local `target-session.json` file is ignored by git.
 
+Before a known 2 AM Target drop window, refresh the Target session from a real browser and clear any Target challenge before uploading:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m poketracker.checkout.target_session `
+  --secret-id poketracker-prod-target-session `
+  --browser-channel chrome `
+  --verify-url "https://www.target.com/p/pok-233-mon-trading-card-game-mega-evolutions-phantasmal-flames-9-pocket-portfolio/-/A-95045259#lnk=sametab"
+```
+
+Use the browser window to clear CAPTCHA/sign-in/payment prompts and confirm the page/cart state is usable before pressing Enter in the terminal. The checkout driver intentionally fails closed if Target presents CAPTCHA, MFA, sign-in, payment verification, or another intervention to the unattended Lambda session.
+
 To allow final purchase submission in deploy, set:
 
 ```powershell

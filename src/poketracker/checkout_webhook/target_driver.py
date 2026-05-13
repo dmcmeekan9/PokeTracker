@@ -9,6 +9,11 @@ from typing import Any
 from poketracker.checkout.target_storage_state import decode_storage_state_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 
+TARGET_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+
 
 @dataclass(frozen=True)
 class TargetCheckoutResult:
@@ -41,22 +46,32 @@ def purchase_target_item(
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             headless=True,
-            args=["--disable-dev-shm-usage", "--no-sandbox"],
+            args=[
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+            ],
         )
-        context = browser.new_context(storage_state=storage_state)
+        context = _new_target_context(browser, storage_state)
         page = context.new_page()
         try:
             page.goto(request.url, wait_until="domcontentloaded", timeout=30000)
-            _stop_on_intervention(page.content())
-            _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart")
+            _stop_on_intervention(_page_content(page))
+            if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
+                if not _page_indicates_cart_has_item(_page_content(page)):
+                    raise CheckoutWebhookError(
+                        409,
+                        "target_add_to_cart_not_found",
+                        "Target checkout could not find the add_to_cart control",
+                    )
             _click_first(page, [r"view cart", r"checkout", r"cart"], "cart_or_checkout", optional=True)
             if "cart" not in page.url and "checkout" not in page.url:
                 page.goto("https://www.target.com/cart", wait_until="domcontentloaded", timeout=30000)
-            _stop_on_intervention(page.content())
+            _stop_on_intervention(_page_content(page))
             actual_quantity = _set_target_quantity(page, request.quantity)
             _click_first(page, [r"checkout", r"sign in to check out"], "checkout", optional=True)
-            _stop_on_intervention(page.content())
-            _verify_checkout_profile_visible(page.content(), profile)
+            _stop_on_intervention(_page_content(page))
+            _verify_checkout_profile_visible(_page_content(page), profile)
 
             if not place_order_enabled:
                 raise CheckoutWebhookError(
@@ -67,7 +82,7 @@ def purchase_target_item(
 
             _click_first(page, [r"place your order", r"place order", r"submit order"], "place_order")
             page.wait_for_load_state("domcontentloaded", timeout=30000)
-            confirmation_html = page.content()
+            confirmation_html = _page_content(page)
             _stop_on_intervention(confirmation_html)
             order_id = _extract_order_id(confirmation_html)
             message = "Target checkout completed"
@@ -86,20 +101,41 @@ def purchase_target_item(
             browser.close()
 
 
-def _click_first(page: Any, labels: list[str], step: str, optional: bool = False) -> None:
+def _new_target_context(browser: Any, storage_state: dict[str, Any]) -> Any:
+    context = browser.new_context(
+        storage_state=storage_state,
+        viewport={"width": 1365, "height": 900},
+        user_agent=TARGET_USER_AGENT,
+        locale="en-US",
+        timezone_id="America/Chicago",
+        geolocation={"latitude": 41.7318, "longitude": -93.6001},
+        permissions=["geolocation"],
+    )
+    context.add_init_script(
+        """
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        window.chrome = window.chrome || { runtime: {} };
+        """
+    )
+    return context
+
+
+def _click_first(page: Any, labels: list[str], step: str, optional: bool = False) -> bool:
     deadline = time.monotonic() + 25
     while time.monotonic() < deadline:
         for candidate in _click_candidates(page, labels, step):
             try:
-                candidate.first.click(timeout=2000)
+                candidate.first.click(timeout=10000)
                 page.wait_for_load_state("domcontentloaded", timeout=10000)
-                return
+                return True
             except Exception:
                 continue
-        _stop_on_intervention(page.content())
+        _stop_on_intervention(_page_content(page))
         page.wait_for_timeout(500)
     if optional:
-        return
+        return False
     raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
 
 
@@ -168,7 +204,6 @@ def _stop_on_intervention(html: str) -> None:
         ("captcha", r"\bcaptcha\b"),
         ("captcha", r"verify you(?:'| a)?re (?:a )?human"),
         ("captcha", r"not a robot"),
-        ("captcha", r"\brecaptcha\b"),
         ("target_blocked", r"loading screen.*something went wrong.*please try again in a bit or use another device"),
         ("identity_verification", r"verify it(?:'| i)?s you"),
         ("identity_verification", r"verification code"),
@@ -192,6 +227,26 @@ def _stop_on_intervention(html: str) -> None:
     for status, pattern in interventions:
         if re.search(pattern, normalized, re.IGNORECASE):
             raise CheckoutWebhookError(409, status, f"Target checkout requires intervention: {status}")
+
+
+def _page_indicates_cart_has_item(html: str) -> bool:
+    normalized = re.sub(r"\s+", " ", html.lower())
+    return bool(re.search(r"\b\d+\s+in cart\b", normalized))
+
+
+def _page_content(page: Any) -> str:
+    deadline = time.monotonic() + 10
+    last_exc: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            return page.content()
+        except Exception as exc:
+            last_exc = exc
+            try:
+                page.wait_for_timeout(500)
+            except Exception:
+                break
+    raise CheckoutWebhookError(504, "target_timeout", f"Target checkout could not read page content: {last_exc}")
 
 
 def _verify_checkout_profile_visible(html: str, profile: dict[str, Any]) -> None:

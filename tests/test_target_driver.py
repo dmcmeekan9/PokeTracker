@@ -66,6 +66,7 @@ def test_quantity_two_uses_select_when_available() -> None:
     ("html", "status"),
     [
         ("<main>Verify you are human before continuing</main>", "captcha"),
+        ("<main>Loading screen Something went wrong Please try again in a bit or use another device.</main>", "target_blocked"),
         ("<main>Enter your password to continue</main>", "sign_in_required"),
         ("<main>We sent a verification code</main>", "identity_verification"),
         ("<main>Enter card security code</main>", "payment_intervention"),

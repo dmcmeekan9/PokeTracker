@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -86,23 +87,41 @@ def purchase_target_item(
 
 
 def _click_first(page: Any, labels: list[str], step: str, optional: bool = False) -> None:
-    for label in labels:
-        pattern = re.compile(label, re.IGNORECASE)
-        candidates = [
-            page.get_by_role("button", name=pattern),
-            page.get_by_role("link", name=pattern),
-            page.get_by_text(pattern),
-        ]
-        for candidate in candidates:
+    deadline = time.monotonic() + 25
+    while time.monotonic() < deadline:
+        for candidate in _click_candidates(page, labels, step):
             try:
-                candidate.first.click(timeout=5000)
+                candidate.first.click(timeout=2000)
                 page.wait_for_load_state("domcontentloaded", timeout=10000)
                 return
             except Exception:
                 continue
+        _stop_on_intervention(page.content())
+        page.wait_for_timeout(500)
     if optional:
         return
     raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
+
+
+def _click_candidates(page: Any, labels: list[str], step: str) -> list[Any]:
+    candidates: list[Any] = []
+    if step == "add_to_cart":
+        candidates.extend(
+            [
+                page.locator('button[data-test="shippingButton"]'),
+                page.locator('button[id^="addToCartButton"]'),
+            ]
+        )
+    for label in labels:
+        pattern = re.compile(label, re.IGNORECASE)
+        candidates.extend(
+            [
+                page.get_by_role("button", name=pattern),
+                page.get_by_role("link", name=pattern),
+                page.get_by_text(pattern),
+            ]
+        )
+    return candidates
 
 
 def _set_target_quantity(page: Any, quantity: int) -> int:
@@ -150,6 +169,7 @@ def _stop_on_intervention(html: str) -> None:
         ("captcha", r"verify you(?:'| a)?re (?:a )?human"),
         ("captcha", r"not a robot"),
         ("captcha", r"\brecaptcha\b"),
+        ("target_blocked", r"loading screen.*something went wrong.*please try again in a bit or use another device"),
         ("identity_verification", r"verify it(?:'| i)?s you"),
         ("identity_verification", r"verification code"),
         ("identity_verification", r"two[- ]factor"),

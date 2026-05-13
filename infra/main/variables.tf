@@ -82,7 +82,7 @@ variable "target_session_verify_url" {
 variable "target_checkout_browser_enabled" {
   description = "Whether to create a persistent EC2-hosted Chrome session for Target checkout and point the managed webhook at it over private CDP."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "target_checkout_browser_instance_type" {

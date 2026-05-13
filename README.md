@@ -32,7 +32,7 @@ Optional:
 
 - `CHECKOUT_WEBHOOK_URL` for an external webhook instead of the managed Lambda webhook
 - `TARGET_PLACE_ORDER_ENABLED` set to `true` only when the Target driver is allowed to click the final place-order button
-- `TARGET_SESSION_REFRESH_ENABLED` default: `true`
+- `TARGET_SESSION_REFRESH_ENABLED` default: `false`
 - `TARGET_SESSION_REFRESH_SCHEDULE_EXPRESSION` default: `cron(45 6,7 * * ? *)`
 - `TARGET_SESSION_VERIFY_URL` optional Target URL opened by the managed AWS session refresher
 - `TARGET_CHECKOUT_BROWSER_ENABLED` default: `true`, creates an EC2-hosted persistent Chrome session for Target checkout
@@ -51,9 +51,9 @@ The managed webhook includes a Target browser driver. It uses a manually capture
 
 For a no-purchase readiness proof, send the checkout webhook payload with `"verify_only": true` or run the local verifier below. In verify-only mode the driver must reach and see the final Target place-order control, then returns `ready_to_place_order` without clicking it. Normal monitor-triggered purchase requests do not set this flag, so a disabled final order click still fails closed and is not recorded as purchased.
 
-Terraform also creates a managed `target-session-refresh` Lambda by default. It opens a headless Target browser in AWS, reloads the stored session, optionally opens `TARGET_SESSION_VERIFY_URL`, and writes the refreshed cookies back to Secrets Manager. The default schedule runs at `cron(45 6,7 * * ? *)`, which is 1:45 AM and 2:45 AM in Central Daylight Time.
+The MVP purchasing path is the EC2-hosted Chrome session below. The older managed `target-session-refresh` Lambda is now optional and disabled by default. If enabled, it opens a headless Target browser in AWS, reloads the stored session, optionally opens `TARGET_SESSION_VERIFY_URL`, and writes the refreshed cookies back to Secrets Manager. The default schedule runs at `cron(45 6,7 * * ? *)`, which is 1:45 AM and 2:45 AM in Central Daylight Time.
 
-The deploy workflow can also be run manually from GitHub Actions with the `refresh_target_session_now` input set to `true`. That path deploys the latest code, then invokes the AWS refresh Lambda immediately so you can verify the stored Target session without waiting for the scheduled window.
+The deploy workflow can also be run manually from GitHub Actions with the `refresh_target_session_now` input set to `true`. That path deploys the latest code, then invokes the AWS refresh Lambda immediately if the optional refresher is enabled.
 
 When `TARGET_CHECKOUT_BROWSER_ENABLED` is true, Terraform also creates a private EC2-hosted Chrome session and points the managed checkout webhook at it with `TARGET_CDP_URL`. The webhook still receives the synchronous purchase request, validates the bearer token/profile/price, then drives the persistent Chrome profile over the private VPC network. Chrome's remote debugging port is not public; it only accepts traffic from the checkout Lambda security group. Use SSM port forwarding to reach the VNC session when you need to sign in or clear a Target prompt.
 
@@ -106,7 +106,7 @@ python -m poketracker.checkout.target_session `
 
 Use the browser window to clear CAPTCHA/sign-in/payment prompts and confirm the page/cart state is usable before pressing Enter in the terminal. The checkout driver intentionally fails closed if Target presents CAPTCHA, MFA, sign-in, payment verification, or another intervention to the unattended Lambda session.
 
-Once that session is uploaded, the managed AWS refresher can keep it warm without leaving a local machine awake overnight. If Target starts challenging the unattended AWS browser again, refresh the session from a trusted real browser and re-upload it.
+Once that session is uploaded, the hosted Chrome profile is the preferred always-ready session. If Target starts challenging the unattended browser, connect through VNC, clear the prompt in the hosted Chrome window, and re-run a verify-only checkout proof.
 
 Verify a no-purchase checkout locally with the captured session:
 
@@ -150,7 +150,7 @@ aws ssm start-session `
 
 Connect a local VNC client to `127.0.0.1:5901`, sign in to Target in the hosted Chrome window, confirm saved payment/shipping, then run a verify-only webhook test before enabling final ordering.
 
-For a local-browser overnight burst, keep the machine awake and use an already-open debug Chrome profile. This is now the fallback path only when the AWS checkout/session refresh path is still being challenged by Target:
+For a local-browser overnight burst, keep the machine awake and use an already-open debug Chrome profile. This is now the fallback path only when the EC2-hosted Chrome session is still being challenged by Target:
 
 ```powershell
 .\scripts\start_target_debug_chrome.ps1

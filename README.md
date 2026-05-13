@@ -90,6 +90,22 @@ python -m poketracker.checkout.target_session `
 
 Use the browser window to clear CAPTCHA/sign-in/payment prompts and confirm the page/cart state is usable before pressing Enter in the terminal. The checkout driver intentionally fails closed if Target presents CAPTCHA, MFA, sign-in, payment verification, or another intervention to the unattended Lambda session.
 
+For a local-browser overnight burst, keep the machine awake and use an already-open debug Chrome profile. This is the fallback path when the local browser session is more reliable than Lambda for a Target drop:
+
+```powershell
+.\scripts\start_target_debug_chrome.ps1
+$env:PYTHONPATH = "src"
+uv run poketracker-local-target-buyer `
+  --refresh-session-first `
+  --target-session-secret-id poketracker-prod-target-session `
+  --wait-until 01:55 `
+  --duration-seconds 4200 `
+  --interval-seconds 10 `
+  --place-order
+```
+
+That command waits until 1:55 AM in the watchlist timezone, asks you to clear any Target challenge in the attached browser, uploads the refreshed Target session back to AWS, and then monitors through roughly 3:05 AM. The computer must stay on, awake, and online for the full run.
+
 To allow final purchase submission in deploy, set:
 
 ```powershell

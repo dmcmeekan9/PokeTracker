@@ -1,0 +1,236 @@
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+from dataclasses import replace
+from datetime import datetime, timedelta
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from poketracker.checkout.profile import load_checkout_profile
+from poketracker.checkout.target_session import capture_target_session_from_cdp, upload_storage_state_secret
+from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
+from poketracker.checkout_webhook.target_driver import (
+    TargetCheckoutResult,
+    _click_first,
+    _extract_order_id,
+    _page_content,
+    _page_indicates_cart_has_item,
+    _set_target_quantity,
+    _stop_on_intervention,
+    _verify_checkout_profile_visible,
+)
+from poketracker.config.watchlist import load_watchlist_file
+from poketracker.models import DecisionType, Retailer, SellerClassification
+from poketracker.rules.engine import RulesEngine
+from poketracker.signals.page import RetailerPageSignalAdapter
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run a local Target checkout burst against an already-open debug Chrome.")
+    parser.add_argument("--watchlist", default="watchlist.yaml", help="Watchlist YAML path.")
+    parser.add_argument("--profile", default="checkout-profile.json", help="Local checkout profile JSON path.")
+    parser.add_argument("--cdp-url", default="http://127.0.0.1:9222", help="Chrome remote debugging URL.")
+    parser.add_argument("--duration-seconds", type=int, default=600, help="How long to monitor.")
+    parser.add_argument("--interval-seconds", type=int, default=10, help="Delay between checks.")
+    parser.add_argument(
+        "--wait-until",
+        help="Optional local start time. Accepts HH:MM or an ISO timestamp such as 2026-05-13T01:55:00-05:00.",
+    )
+    parser.add_argument(
+        "--refresh-session-first",
+        action="store_true",
+        help="Refresh the attached browser session before monitoring and optionally upload it to AWS.",
+    )
+    parser.add_argument("--session-output", default="target-session.json", help="Where to save the refreshed session JSON.")
+    parser.add_argument(
+        "--target-session-secret-id",
+        default=os.environ.get("TARGET_SESSION_SECRET_ARN") or os.environ.get("TARGET_SESSION_SECRET_ID"),
+        help="Optional Secrets Manager secret id or ARN to update after refreshing the browser session.",
+    )
+    parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-east-1"), help="AWS region for session upload.")
+    parser.add_argument(
+        "--verify-url",
+        help="Optional Target product URL to open during session refresh. Defaults to the first enabled Target item.",
+    )
+    parser.add_argument("--place-order", action="store_true", help="Allow clicking Target's final place-order button.")
+    parser.add_argument("--once", action="store_true", help="Run one pass and exit.")
+    args = parser.parse_args()
+
+    profile = load_checkout_profile(args.profile)
+    config = load_watchlist_file(args.watchlist)
+    timezone_name = config.global_config.timezone
+    _wait_until_start(args.wait_until, timezone_name)
+    if args.refresh_session_first:
+        verify_url = args.verify_url or _default_verify_url(config)
+        storage_state = capture_target_session_from_cdp(args.session_output, args.cdp_url, verify_url=verify_url)
+        if args.target_session_secret_id:
+            encoding = upload_storage_state_secret(storage_state, args.target_session_secret_id, args.region)
+            print(
+                f"target session uploaded to {args.target_session_secret_id} ({encoding})",
+                flush=True,
+            )
+
+    engine = RulesEngine(replace(config.global_config, purchasing_enabled=True))
+    adapter = RetailerPageSignalAdapter(timeout_seconds=8, max_attempts=1)
+    purchased_item_ids: set[str] = set()
+    local_spend = Decimal("0")
+    deadline = time.monotonic() + args.duration_seconds
+
+    while True:
+        for item in config.items:
+            if not item.enabled or item.retailer != Retailer.TARGET or item.id in purchased_item_ids:
+                continue
+
+            signal = adapter.check(item)
+            decision = engine.evaluate(signal, local_spend)
+            print(f"{item.id}: {signal.status.value} {decision.type.value} - {decision.reason}", flush=True)
+            if decision.type != DecisionType.WOULD_BUY:
+                continue
+
+            request = PurchaseRequest(
+                item_id=item.id,
+                item_name=item.name,
+                retailer=item.retailer.value,
+                sku=item.sku,
+                url=item.url,
+                quantity=decision.quantity,
+                observed_price=decision.observed_price or item.msrp,
+                msrp=item.msrp,
+            )
+            try:
+                result = purchase_target_item_from_cdp(args.cdp_url, request, profile, place_order_enabled=args.place_order)
+            except CheckoutWebhookError as exc:
+                print(f"{item.id}: checkout failed {exc.status} - {exc.message}", flush=True)
+                continue
+
+            print(f"{item.id}: checkout {result.status} quantity={result.quantity} order_id={result.order_id}", flush=True)
+            if result.status == "ordered":
+                purchased_item_ids.add(item.id)
+                local_spend += request.observed_price * result.quantity
+
+        if args.once or time.monotonic() >= deadline:
+            return
+        time.sleep(args.interval_seconds)
+
+
+def purchase_target_item_from_cdp(
+    cdp_url: str,
+    request: PurchaseRequest,
+    profile: dict[str, Any],
+    *,
+    place_order_enabled: bool,
+) -> TargetCheckoutResult:
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise CheckoutWebhookError(503, "driver_dependency_missing", "Playwright is not installed") from exc
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.connect_over_cdp(cdp_url)
+        try:
+            context = browser.contexts[0] if browser.contexts else browser.new_context()
+            page = context.pages[0] if context.pages else context.new_page()
+            try:
+                page.goto(request.url, wait_until="domcontentloaded", timeout=30000)
+                _stop_on_intervention(_page_content(page))
+                if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
+                    if not _page_indicates_cart_has_item(_page_content(page)):
+                        raise CheckoutWebhookError(
+                            409,
+                            "target_add_to_cart_not_found",
+                            "Target checkout could not find the add_to_cart control",
+                        )
+                _click_first(page, [r"view cart", r"checkout", r"cart"], "cart_or_checkout", optional=True)
+                if "cart" not in page.url and "checkout" not in page.url:
+                    page.goto("https://www.target.com/cart", wait_until="domcontentloaded", timeout=30000)
+                _stop_on_intervention(_page_content(page))
+                actual_quantity = _set_target_quantity(page, request.quantity)
+                _click_first(page, [r"checkout", r"sign in to check out"], "checkout", optional=True)
+                _stop_on_intervention(_page_content(page))
+                _verify_checkout_profile_visible(_page_content(page), profile)
+
+                if not place_order_enabled:
+                    raise CheckoutWebhookError(
+                        409,
+                        "place_order_disabled",
+                        "local Target checkout was prepared but --place-order was not passed",
+                    )
+
+                _click_first(page, [r"place your order", r"place order", r"submit order"], "place_order")
+                page.wait_for_load_state("domcontentloaded", timeout=30000)
+                confirmation_html = _page_content(page)
+                _stop_on_intervention(confirmation_html)
+                return TargetCheckoutResult(
+                    status="ordered",
+                    order_id=_extract_order_id(confirmation_html),
+                    message="Target checkout completed from local Chrome",
+                    quantity=actual_quantity,
+                )
+            except PlaywrightTimeoutError as exc:
+                raise CheckoutWebhookError(504, "target_timeout", f"Target checkout timed out: {exc}") from exc
+        finally:
+            # For CDP this disconnects Playwright from Chrome; the user's browser remains open.
+            browser.close()
+
+
+def _default_verify_url(config: Any) -> str | None:
+    for item in config.items:
+        if item.enabled and item.retailer == Retailer.TARGET:
+            return item.url
+    return None
+
+
+def _wait_until_start(wait_until: str | None, timezone_name: str) -> None:
+    if not wait_until:
+        return
+    start_at = _parse_wait_until(wait_until, timezone_name)
+    remaining = (start_at - datetime.now(start_at.tzinfo)).total_seconds()
+    if remaining <= 0:
+        return
+    print(f"waiting until {start_at.isoformat()} before starting local Target burst", flush=True)
+    time.sleep(remaining)
+
+
+def _parse_wait_until(raw: str, timezone_name: str) -> datetime:
+    timezone = _resolve_timezone(timezone_name)
+    if len(raw) == 5 and raw[2] == ":":
+        hour, minute = raw.split(":", maxsplit=1)
+        now = datetime.now(timezone)
+        candidate = now.replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
+        if candidate <= now:
+            candidate += timedelta(days=1)
+        return candidate
+
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone)
+    return parsed.astimezone(timezone)
+
+
+def _resolve_timezone(timezone_name: str) -> Any:
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        local_timezone = datetime.now().astimezone().tzinfo
+        if local_timezone is None:
+            raise
+        print(
+            f"warning: timezone data for {timezone_name!r} is unavailable; falling back to the local system timezone",
+            file=sys.stderr,
+            flush=True,
+        )
+        return local_timezone
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)

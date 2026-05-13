@@ -23,6 +23,7 @@ poketracker = "poketracker.main:main"
 poketracker-preview-email = "poketracker.preview_email:main"
 poketracker-put-checkout-profile = "poketracker.checkout.profile:main"
 poketracker-capture-target-session = "poketracker.checkout.target_session:main"
+poketracker-local-target-buyer = "poketracker.checkout.local_target_buyer:main"
 poketracker-validate-watchlist = "poketracker.validate_watchlist:main"
 poketracker-sync-watchlist = "poketracker.sync_watchlist:main"
 

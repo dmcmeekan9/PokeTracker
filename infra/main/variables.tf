@@ -12,7 +12,7 @@ variable "github_repository" {
 variable "alert_sender_email" {
   description = "SES sender email identity."
   type        = string
-  default     = "poketrackerx@gmail.com"
+  default     = "poketrackerx@proton.me"
 }
 
 variable "alert_recipient_email" {

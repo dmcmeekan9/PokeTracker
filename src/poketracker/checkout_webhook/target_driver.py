@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 from dataclasses import dataclass
 from typing import Any
 
+from poketracker.checkout.target_storage_state import decode_storage_state_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 
 
@@ -26,9 +26,9 @@ def purchase_target_item(
         raise CheckoutWebhookError(503, "target_session_missing", "Target session secret is not configured")
 
     try:
-        storage_state = json.loads(target_session_json)
-    except json.JSONDecodeError as exc:
-        raise CheckoutWebhookError(503, "target_session_invalid", f"Target session secret is not valid JSON: {exc}") from exc
+        storage_state = decode_storage_state_secret(target_session_json)
+    except ValueError as exc:
+        raise CheckoutWebhookError(503, "target_session_invalid", str(exc)) from exc
 
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError

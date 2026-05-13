@@ -9,6 +9,8 @@ from typing import Any
 
 import boto3
 
+from poketracker.checkout.target_storage_state import SECRET_ENCODING_PREFIX, encode_storage_state_for_secret
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Capture and upload a manually authenticated Target browser session.")
@@ -29,8 +31,10 @@ def main() -> None:
 
     if args.secret_id:
         client = boto3.client("secretsmanager", region_name=args.region)
-        client.put_secret_value(SecretId=args.secret_id, SecretString=json.dumps(storage_state, separators=(",", ":")))
-        print("target session uploaded")
+        secret_string = encode_storage_state_for_secret(storage_state)
+        client.put_secret_value(SecretId=args.secret_id, SecretString=secret_string)
+        encoding = "gzip+base64 encoded" if secret_string.startswith(SECRET_ENCODING_PREFIX) else "plain JSON"
+        print(f"target session uploaded ({encoding})")
     else:
         print(f"target session saved to {args.output}")
 

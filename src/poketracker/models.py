@@ -3,17 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 
-class Retailer(StrEnum):
+class Retailer(str, Enum):
     TARGET = "target"
     WALMART = "walmart"
     BESTBUY = "bestbuy"
 
 
-class ProductType(StrEnum):
+class ProductType(str, Enum):
     ETB = "ETB"
     BOOSTER_BUNDLE = "Booster Bundle"
 
@@ -30,20 +30,20 @@ def parse_product_type(value: str) -> ProductType:
     return ProductType(value)
 
 
-class SellerClassification(StrEnum):
+class SellerClassification(str, Enum):
     RETAILER = "retailer"
     THIRD_PARTY = "third_party"
     UNKNOWN = "unknown"
 
 
-class SignalStatus(StrEnum):
+class SignalStatus(str, Enum):
     IN_STOCK = "in_stock"
     OUT_OF_STOCK = "out_of_stock"
     UNKNOWN = "unknown"
     ERROR = "error"
 
 
-class DecisionType(StrEnum):
+class DecisionType(str, Enum):
     WOULD_BUY = "WOULD_BUY"
     PURCHASED = "PURCHASED"
     PURCHASE_FAILED = "PURCHASE_FAILED"

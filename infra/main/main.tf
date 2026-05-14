@@ -555,7 +555,7 @@ resource "aws_lambda_function" "checkout_webhook" {
   package_type  = "Image"
   image_uri     = var.checkout_webhook_image_uri
   timeout       = local.target_checkout_browser_enabled ? 300 : 120
-  memory_size   = 1024
+  memory_size   = var.checkout_webhook_memory_size
 
   environment {
     variables = {

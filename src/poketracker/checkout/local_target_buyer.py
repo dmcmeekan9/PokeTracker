@@ -19,6 +19,7 @@ from poketracker.checkout_webhook.target_driver import (
     TargetCheckoutResult,
     _click_first,
     _extract_order_id,
+    _goto_target_page,
     _page_content,
     _page_indicates_cart_has_item,
     _set_target_quantity,
@@ -153,7 +154,7 @@ def purchase_target_item_from_cdp(
             context = browser.contexts[0] if browser.contexts else browser.new_context()
             page = context.pages[0] if context.pages else context.new_page()
             try:
-                page.goto(request.url, wait_until="domcontentloaded", timeout=30000)
+                _goto_target_page(page, request.url)
                 _stop_on_intervention(_page_content(page))
                 if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
                     if not _page_indicates_cart_has_item(_page_content(page)):
@@ -164,7 +165,7 @@ def purchase_target_item_from_cdp(
                         )
                 _click_first(page, [r"view cart", r"checkout", r"check\s*out", r"cart"], "cart_or_checkout", optional=True)
                 if "cart" not in page.url and "checkout" not in page.url:
-                    page.goto("https://www.target.com/cart", wait_until="domcontentloaded", timeout=30000)
+                    _goto_target_page(page, "https://www.target.com/cart")
                 _stop_on_intervention(_page_content(page))
                 _select_standard_shipping(page)
                 actual_quantity = _set_target_quantity(page, request.quantity)

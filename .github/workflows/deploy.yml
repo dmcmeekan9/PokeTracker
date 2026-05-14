@@ -32,8 +32,9 @@ jobs:
       TF_VAR_target_session_refresh_schedule_expression: ${{ vars.TARGET_SESSION_REFRESH_SCHEDULE_EXPRESSION || 'cron(45 6,7 * * ? *)' }}
       TF_VAR_target_session_verify_url: ${{ vars.TARGET_SESSION_VERIFY_URL }}
       TF_VAR_target_checkout_browser_enabled: ${{ vars.TARGET_CHECKOUT_BROWSER_ENABLED || 'true' }}
-      TF_VAR_target_checkout_browser_instance_type: ${{ vars.TARGET_CHECKOUT_BROWSER_INSTANCE_TYPE || 't3a.small' }}
+      TF_VAR_target_checkout_browser_instance_type: ${{ vars.TARGET_CHECKOUT_BROWSER_INSTANCE_TYPE || 'c7i.large' }}
       TF_VAR_target_checkout_browser_volume_size: ${{ vars.TARGET_CHECKOUT_BROWSER_VOLUME_SIZE || '20' }}
+      TF_VAR_checkout_webhook_memory_size: ${{ vars.CHECKOUT_WEBHOOK_MEMORY_SIZE || '2048' }}
       CHECKOUT_WEBHOOK_URL: ${{ vars.CHECKOUT_WEBHOOK_URL }}
       POKETRACKER_MANAGED_CHECKOUT_WEBHOOK: "true"
       TF_VAR_image_tag: latest

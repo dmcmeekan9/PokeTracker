@@ -15,6 +15,17 @@ TARGET_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
+CLICK_STEP_DEADLINES = {
+    "add_to_cart": 12,
+    "cart_or_checkout": 5,
+    "checkout": 8,
+    "place_order": 10,
+    "quantity_increment": 5,
+}
+DEFAULT_CLICK_DEADLINE_SECONDS = 10
+OPTIONAL_CLICK_DEADLINE_SECONDS = 4
+CLICK_TIMEOUT_MS = 2500
+CLICK_LOAD_STATE_TIMEOUT_MS = 3000
 
 
 @dataclass(frozen=True)
@@ -60,7 +71,7 @@ def purchase_target_item(
         context = _new_target_context(browser, storage_state)
         page = context.new_page()
         try:
-            page.goto(request.url, wait_until="domcontentloaded", timeout=30000)
+            _goto_target_page(page, request.url)
             _stop_on_intervention(_page_content(page))
             if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
                 if not _page_indicates_cart_has_item(_page_content(page)):
@@ -71,7 +82,7 @@ def purchase_target_item(
                     )
             _click_first(page, [r"view cart", r"checkout", r"check\s*out", r"cart"], "cart_or_checkout", optional=True)
             if "cart" not in page.url and "checkout" not in page.url:
-                page.goto("https://www.target.com/cart", wait_until="domcontentloaded", timeout=30000)
+                _goto_target_page(page, "https://www.target.com/cart")
             _stop_on_intervention(_page_content(page))
             _select_standard_shipping(page)
             actual_quantity = _set_target_quantity(page, request.quantity)
@@ -143,10 +154,10 @@ def refresh_target_session(
         context = _new_target_context(browser, storage_state)
         page = context.new_page()
         try:
-            page.goto("https://www.target.com/account", wait_until="domcontentloaded", timeout=30000)
+            _goto_target_page(page, "https://www.target.com/account")
             _stop_on_intervention(_page_content(page))
             if verify_url:
-                page.goto(verify_url, wait_until="domcontentloaded", timeout=30000)
+                _goto_target_page(page, verify_url)
                 _stop_on_intervention(_page_content(page))
             refreshed_state = context.storage_state()
             message = "Target session refreshed in AWS"
@@ -196,13 +207,18 @@ def _new_target_context(browser: Any, storage_state: dict[str, Any]) -> Any:
     return context
 
 
+def _goto_target_page(page: Any, url: str, timeout: int = 15000) -> None:
+    page.goto(url, wait_until="commit", timeout=timeout)
+    page.wait_for_timeout(750)
+
+
 def _click_first(page: Any, labels: list[str], step: str, optional: bool = False) -> bool:
-    deadline = time.monotonic() + 25
+    deadline = time.monotonic() + _click_deadline_seconds(step, optional)
     while time.monotonic() < deadline:
         for candidate in _click_candidates(page, labels, step):
             try:
-                candidate.first.click(timeout=10000)
-                page.wait_for_load_state("domcontentloaded", timeout=10000)
+                candidate.first.click(timeout=CLICK_TIMEOUT_MS)
+                page.wait_for_load_state("domcontentloaded", timeout=CLICK_LOAD_STATE_TIMEOUT_MS)
                 return True
             except Exception:
                 continue
@@ -215,7 +231,7 @@ def _click_first(page: Any, labels: list[str], step: str, optional: bool = False
 
 
 def _verify_click_candidate_present(page: Any, labels: list[str], step: str) -> None:
-    deadline = time.monotonic() + 25
+    deadline = time.monotonic() + _click_deadline_seconds(step, optional=False)
     while time.monotonic() < deadline:
         for candidate in _click_candidates(page, labels, step):
             try:
@@ -227,6 +243,14 @@ def _verify_click_candidate_present(page: Any, labels: list[str], step: str) -> 
         page.wait_for_timeout(500)
     _write_debug_artifacts(page, step)
     raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
+
+
+def _click_deadline_seconds(step: str, optional: bool) -> int:
+    if step in CLICK_STEP_DEADLINES:
+        return CLICK_STEP_DEADLINES[step]
+    if optional:
+        return OPTIONAL_CLICK_DEADLINE_SECONDS
+    return CLICK_STEP_DEADLINES.get(step, DEFAULT_CLICK_DEADLINE_SECONDS)
 
 
 def _click_candidates(page: Any, labels: list[str], step: str) -> list[Any]:

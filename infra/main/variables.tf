@@ -88,7 +88,7 @@ variable "target_checkout_browser_enabled" {
 variable "target_checkout_browser_instance_type" {
   description = "EC2 instance type for the persistent Target Chrome checkout browser."
   type        = string
-  default     = "t3a.small"
+  default     = "c7i.large"
 }
 
 variable "target_checkout_browser_volume_size" {
@@ -101,4 +101,10 @@ variable "checkout_webhook_image_uri" {
   description = "Container image URI for the managed checkout webhook Lambda. When empty, Terraform creates only the ECR repository."
   type        = string
   default     = ""
+}
+
+variable "checkout_webhook_memory_size" {
+  description = "Memory size in MB for the managed checkout webhook Lambda. Higher memory also provides more CPU for Playwright orchestration."
+  type        = number
+  default     = 2048
 }

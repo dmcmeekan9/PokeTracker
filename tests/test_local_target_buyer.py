@@ -30,6 +30,9 @@ class FakePage:
         _ = state
         _ = timeout
 
+    def wait_for_timeout(self, timeout: int) -> None:
+        _ = timeout
+
 
 class FakeContext:
     def __init__(self, page: FakePage) -> None:

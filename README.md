@@ -57,7 +57,7 @@ The deploy workflow can also be run manually from GitHub Actions with the `refre
 
 When `TARGET_CHECKOUT_BROWSER_ENABLED` is true, Terraform also creates a private EC2-hosted Chrome session and points the managed checkout webhook at it with `TARGET_CDP_URL`. The webhook still receives the synchronous purchase request, validates the bearer token/profile/price, then drives the persistent Chrome profile over the private VPC network. Chrome's remote debugging port is not public; it only accepts traffic from the checkout Lambda security group. Use SSM port forwarding to reach the VNC session when you need to sign in or clear a Target prompt.
 
-The default hosted browser is intentionally small: `t3a.small`, 20 GiB gp3, one public IPv4 address for outbound internet/SSM, and a single-AZ Secrets Manager VPC endpoint for the checkout Lambda. In `us-east-1`, that is roughly mid-$20s/month always-on before small data and log charges.
+The default hosted browser favors checkout speed over the absolute cheapest footprint: `c7i.large`, 20 GiB gp3, one public IPv4 address for outbound internet/SSM, and a single-AZ Secrets Manager VPC endpoint for the checkout Lambda. You can lower `TARGET_CHECKOUT_BROWSER_INSTANCE_TYPE` to `t3a.small` for cheaper always-on validation, but checkout will be more CPU constrained.
 
 Successful purchases are recorded in the state table so weekly spend caps include real purchase activity and the same item is not purchased again in the same configured week.
 

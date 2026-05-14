@@ -91,6 +91,20 @@ def test_saved_payment_label_is_not_intervention() -> None:
     _stop_on_intervention("<main>Payment method Visa ending in 4242</main>")
 
 
+def test_payment_selector_with_place_order_is_not_intervention() -> None:
+    _stop_on_intervention(
+        """
+        <main>
+          Select payment type
+          Visa *9521
+          Save and continue
+          By ordering, you accept Target's terms and privacy policy
+          Place your order
+        </main>
+        """
+    )
+
+
 def test_detects_item_already_in_cart() -> None:
     assert _page_indicates_cart_has_item('<span aria-label="cart">1 in cart</span>')
     assert not _page_indicates_cart_has_item("<main>Your cart is empty</main>")

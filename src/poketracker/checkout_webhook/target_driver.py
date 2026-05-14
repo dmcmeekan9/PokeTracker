@@ -308,6 +308,7 @@ def _set_target_quantity(page: Any, quantity: int) -> int:
 
 def _stop_on_intervention(html: str) -> None:
     normalized = re.sub(r"\s+", " ", html.lower())
+    ready_to_order = bool(re.search(r"place\s+(?:your\s+)?order|submit\s+order", normalized))
     interventions = [
         ("captcha", r"\bcaptcha\b"),
         ("captcha", r"verify you(?:'| a)?re (?:a )?human"),
@@ -323,18 +324,36 @@ def _stop_on_intervention(html: str) -> None:
         ("sign_in_required", r"enter your password"),
         ("sign_in_required", r"password is required"),
         ("sign_in_required", r"email or mobile phone"),
-        ("payment_intervention", r"enter (?:the )?(?:card )?security code"),
-        ("payment_intervention", r"\bcvv\b"),
-        ("payment_intervention", r"\bcvc\b"),
-        ("payment_intervention", r"select (?:a )?payment method"),
-        ("payment_intervention", r"add (?:a )?payment method"),
-        ("payment_intervention", r"update (?:your )?payment"),
-        ("payment_intervention", r"payment (?:could not|can't|cannot|was not) (?:be )?(?:authorized|processed|verified)"),
-        ("payment_intervention", r"card (?:declined|was declined|could not be verified)"),
     ]
     for status, pattern in interventions:
         if re.search(pattern, normalized, re.IGNORECASE):
             raise CheckoutWebhookError(409, status, f"Target checkout requires intervention: {status}")
+
+    hard_payment_interventions = [
+        r"enter (?:the )?(?:card )?security code",
+        r"\bcvv\b",
+        r"\bcvc\b",
+        r"payment (?:could not|can't|cannot|was not) (?:be )?(?:authorized|processed|verified)",
+        r"card (?:declined|was declined|could not be verified)",
+    ]
+    for pattern in hard_payment_interventions:
+        if re.search(pattern, normalized, re.IGNORECASE):
+            raise CheckoutWebhookError(409, "payment_intervention", "Target checkout requires intervention: payment_intervention")
+
+    soft_payment_interventions = [
+        r"select (?:a )?payment method",
+        r"select payment type",
+        r"add (?:a )?payment method",
+        r"update (?:your )?payment",
+    ]
+    if not ready_to_order:
+        for pattern in soft_payment_interventions:
+            if re.search(pattern, normalized, re.IGNORECASE):
+                raise CheckoutWebhookError(
+                    409,
+                    "payment_intervention",
+                    "Target checkout requires intervention: payment_intervention",
+                )
 
 
 def _page_indicates_cart_has_item(html: str) -> bool:

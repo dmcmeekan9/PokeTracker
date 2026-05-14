@@ -378,6 +378,12 @@ resource "aws_iam_role_policy_attachment" "checkout_webhook_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "checkout_webhook_vpc_access" {
+  count      = local.checkout_webhook_lambda_enabled ? 1 : 0
+  role       = aws_iam_role.checkout_webhook[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
 resource "aws_iam_role_policy" "checkout_webhook" {
   count = local.checkout_webhook_lambda_enabled ? 1 : 0
   name  = "${local.name_prefix}-checkout-webhook"
@@ -573,6 +579,7 @@ resource "aws_lambda_function" "checkout_webhook" {
   depends_on = [
     aws_iam_role_policy.github_actions,
     aws_iam_role_policy_attachment.checkout_webhook_basic,
+    aws_iam_role_policy_attachment.checkout_webhook_vpc_access,
     aws_vpc_endpoint.secretsmanager,
   ]
 }
@@ -600,6 +607,7 @@ resource "aws_lambda_function" "target_session_refresh" {
   depends_on = [
     aws_iam_role_policy.github_actions,
     aws_iam_role_policy_attachment.checkout_webhook_basic,
+    aws_iam_role_policy_attachment.checkout_webhook_vpc_access,
   ]
 }
 

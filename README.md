@@ -61,7 +61,7 @@ The default hosted browser is intentionally small: `t3a.small`, 20 GiB gp3, one 
 
 Successful purchases are recorded in the state table so weekly spend caps include real purchase activity and the same item is not purchased again in the same configured week.
 
-Target restock monitoring runs every minute all day. Additional EventBridge burst windows currently start at 2:00 AM and 3:00 AM Central Daylight Time; each burst checks repeatedly for 10 minutes with a 10-second interval.
+Target restock monitoring runs every minute all day. Additional EventBridge burst windows currently start at 1:55 AM and 2:55 AM Central Daylight Time; each burst checks repeatedly for 10 minutes with a 10-second interval so checks are already active before common top-of-hour drops.
 
 Expected webhook response fields are optional JSON:
 

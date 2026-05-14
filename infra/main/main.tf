@@ -764,8 +764,8 @@ resource "aws_cloudwatch_event_target" "task" {
 
 resource "aws_cloudwatch_event_rule" "target_burst" {
   for_each = {
-    "2am" = "cron(0 7 * * ? *)"
-    "3am" = "cron(0 8 * * ? *)"
+    "2am" = "cron(55 6 * * ? *)"
+    "3am" = "cron(55 7 * * ? *)"
   }
 
   name                = "${local.name_prefix}-target-burst-${each.key}"

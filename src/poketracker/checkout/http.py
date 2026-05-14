@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from decimal import Decimal
 from typing import Any
@@ -15,11 +16,11 @@ class HttpCheckoutAdapter(CheckoutAdapter):
         self,
         webhook_url: str,
         bearer_token: str | None = None,
-        timeout_seconds: int = 15,
+        timeout_seconds: int | None = None,
     ) -> None:
         self.webhook_url = webhook_url
         self.bearer_token = bearer_token
-        self.timeout_seconds = timeout_seconds
+        self.timeout_seconds = timeout_seconds or _checkout_timeout_seconds()
 
     def execute(self, decision: Decision) -> Decision:
         if decision.type != DecisionType.WOULD_BUY:
@@ -132,3 +133,12 @@ def _failed(decision: Decision, reason: str, status: str, message: str | None) -
         checkout_status=status,
         checkout_message=message,
     )
+
+
+def _checkout_timeout_seconds() -> int:
+    raw = os.environ.get("CHECKOUT_WEBHOOK_TIMEOUT_SECONDS", "285")
+    try:
+        timeout = int(raw)
+    except ValueError:
+        return 285
+    return max(1, timeout)

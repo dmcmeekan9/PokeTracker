@@ -72,6 +72,7 @@ def test_http_checkout_posts_purchase_payload(monkeypatch) -> None:
     assert calls[0]["headers"]["Authorization"] == "Bearer secret"
     assert calls[0]["json"]["item"]["id"] == "target-ascended-heroes-etb"
     assert calls[0]["json"]["observed_price"] == "59.99"
+    assert calls[0]["timeout"] == 285
 
 
 def test_http_checkout_records_actual_quantity(monkeypatch) -> None:

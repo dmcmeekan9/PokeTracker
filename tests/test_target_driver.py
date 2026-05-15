@@ -5,6 +5,7 @@ import pytest
 from poketracker.checkout.target_storage_state import decode_storage_state_secret, encode_storage_state_for_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError
 from poketracker.checkout_webhook.target_driver import (
+    _dismiss_target_overlays,
     _page_indicates_cart_has_item,
     _set_target_quantity,
     _stop_on_intervention,
@@ -135,11 +136,13 @@ class PageWithVisiblePlaceOrder:
 
     def get_by_role(self, role: str, name) -> VisibleControl:
         _ = role
-        _ = name
+        if getattr(name, "pattern", "") in {r"continue shopping", r"close"}:
+            return MissingControl()
         return self.control
 
     def get_by_text(self, pattern) -> VisibleControl:
-        _ = pattern
+        if getattr(pattern, "pattern", "") in {r"continue shopping", r"close"}:
+            return MissingControl()
         return self.control
 
 
@@ -150,6 +153,52 @@ def test_verify_click_candidate_present_does_not_click() -> None:
 
     assert page.control.waited is True
     assert page.control.clicked is False
+
+
+class MissingControl:
+    @property
+    def first(self) -> "MissingControl":
+        return self
+
+    def click(self, *args, **kwargs) -> None:
+        _ = args
+        _ = kwargs
+        raise RuntimeError("missing")
+
+
+class PageWithTargetOverlay:
+    def __init__(self) -> None:
+        self.continue_button = VisibleControl()
+        self.load_states: list[str] = []
+        self.waited = False
+
+    def get_by_role(self, role: str, name) -> VisibleControl | MissingControl:
+        _ = name
+        if role == "button":
+            return self.continue_button
+        return MissingControl()
+
+    def get_by_text(self, pattern) -> MissingControl:
+        _ = pattern
+        return MissingControl()
+
+    def wait_for_load_state(self, state: str, timeout: int) -> None:
+        _ = timeout
+        self.load_states.append(state)
+
+    def wait_for_timeout(self, timeout: int) -> None:
+        assert timeout == 250
+        self.waited = True
+
+
+def test_dismiss_target_overlay_clicks_continue_button() -> None:
+    page = PageWithTargetOverlay()
+
+    _dismiss_target_overlays(page)
+
+    assert page.continue_button.clicked is True
+    assert page.load_states == ["domcontentloaded"]
+    assert page.waited is True
 
 
 def test_large_target_session_secret_round_trips_with_encoding() -> None:

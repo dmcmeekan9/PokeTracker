@@ -256,7 +256,10 @@ resource "aws_security_group" "vpc_endpoint" {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = [aws_security_group.checkout_webhook_lambda[0].id]
+    security_groups = [
+      aws_security_group.checkout_webhook_lambda[0].id,
+      aws_security_group.task.id
+    ]
   }
 }
 
@@ -458,7 +461,7 @@ resource "aws_instance" "target_checkout_browser" {
     export DEBIAN_FRONTEND=noninteractive
 
     apt-get update
-    apt-get install -y ca-certificates curl gnupg openbox xvfb x11vnc
+    apt-get install -y ca-certificates curl gnupg openbox socat xvfb x11vnc
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
     chmod a+r /etc/apt/keyrings/google-chrome.gpg
@@ -514,7 +517,23 @@ resource "aws_instance" "target_checkout_browser" {
     [Service]
     User=poketracker
     Environment=DISPLAY=:1
-    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --disable-dev-shm-usage --window-size=1365,900 https://www.target.com/account
+    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --disable-dev-shm-usage --window-size=1365,900 https://www.target.com/account
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+
+    cat >/etc/systemd/system/poketracker-cdp-proxy.service <<'UNIT'
+    [Unit]
+    Description=PokeTracker CDP proxy for Lambda access
+    After=network-online.target poketracker-chrome.service
+    Wants=network-online.target
+    Requires=poketracker-chrome.service
+
+    [Service]
+    ExecStart=/usr/bin/socat TCP-LISTEN:9222,bind=0.0.0.0,reuseaddr,fork TCP:127.0.0.1:9223
     Restart=always
     RestartSec=5
 
@@ -540,7 +559,7 @@ resource "aws_instance" "target_checkout_browser" {
     UNIT
 
     systemctl daemon-reload
-    systemctl enable --now poketracker-display poketracker-openbox poketracker-chrome poketracker-vnc
+    systemctl enable --now poketracker-display poketracker-openbox poketracker-chrome poketracker-cdp-proxy poketracker-vnc
   EOF
 
   tags = {

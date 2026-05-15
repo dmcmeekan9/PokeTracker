@@ -72,6 +72,7 @@ def purchase_target_item(
         page = context.new_page()
         try:
             _goto_target_page(page, request.url)
+            _dismiss_target_overlays(page)
             _stop_on_intervention(_page_content(page))
             if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
                 if not _page_indicates_cart_has_item(_page_content(page)):
@@ -155,9 +156,11 @@ def refresh_target_session(
         page = context.new_page()
         try:
             _goto_target_page(page, "https://www.target.com/account")
+            _dismiss_target_overlays(page)
             _stop_on_intervention(_page_content(page))
             if verify_url:
                 _goto_target_page(page, verify_url)
+                _dismiss_target_overlays(page)
                 _stop_on_intervention(_page_content(page))
             refreshed_state = context.storage_state()
             message = "Target session refreshed in AWS"
@@ -215,6 +218,7 @@ def _goto_target_page(page: Any, url: str, timeout: int = 15000) -> None:
 def _click_first(page: Any, labels: list[str], step: str, optional: bool = False) -> bool:
     deadline = time.monotonic() + _click_deadline_seconds(step, optional)
     while time.monotonic() < deadline:
+        _dismiss_target_overlays(page)
         for candidate in _click_candidates(page, labels, step):
             try:
                 candidate.first.click(timeout=CLICK_TIMEOUT_MS)
@@ -233,6 +237,7 @@ def _click_first(page: Any, labels: list[str], step: str, optional: bool = False
 def _verify_click_candidate_present(page: Any, labels: list[str], step: str) -> None:
     deadline = time.monotonic() + _click_deadline_seconds(step, optional=False)
     while time.monotonic() < deadline:
+        _dismiss_target_overlays(page)
         for candidate in _click_candidates(page, labels, step):
             try:
                 candidate.first.wait_for(state="visible", timeout=1000)
@@ -272,6 +277,19 @@ def _click_candidates(page: Any, labels: list[str], step: str) -> list[Any]:
             ]
         )
     return candidates
+
+
+def _dismiss_target_overlays(page: Any) -> None:
+    for label in [r"continue shopping", r"close"]:
+        pattern = re.compile(label, re.IGNORECASE)
+        for candidate in [page.get_by_role("button", name=pattern), page.get_by_text(pattern)]:
+            try:
+                candidate.first.click(timeout=1000)
+                page.wait_for_load_state("domcontentloaded", timeout=CLICK_LOAD_STATE_TIMEOUT_MS)
+                page.wait_for_timeout(250)
+                return
+            except Exception:
+                continue
 
 
 def _select_standard_shipping(page: Any) -> None:

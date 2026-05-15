@@ -70,7 +70,7 @@ variable "target_session_refresh_enabled" {
 variable "target_session_refresh_schedule_expression" {
   description = "EventBridge schedule for the managed Target session refresh Lambda. Leave empty to disable the schedule."
   type        = string
-  default     = "cron(45 6,7 * * ? *)"
+  default     = "cron(25 6 * * ? *)"
 }
 
 variable "target_session_verify_url" {

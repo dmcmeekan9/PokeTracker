@@ -799,20 +799,17 @@ resource "aws_cloudwatch_event_target" "task" {
 }
 
 resource "aws_cloudwatch_event_rule" "target_burst" {
-  for_each = {
-    "2am" = "cron(55 6 * * ? *)"
-    "3am" = "cron(55 7 * * ? *)"
-  }
-
-  name                = "${local.name_prefix}-target-burst-${each.key}"
-  schedule_expression = each.value
+  # Single nightly burst: 1:55 AM – 4:05 AM CT (130 min at 5-sec polling intervals).
+  # One ECS task fires and loops internally until the window closes.
+  # CDT (UTC-5, Mar–Nov): 6:55 UTC = 1:55 AM CT
+  # CST (UTC-6, Nov–Mar): 6:55 UTC = 12:55 AM CT (1 hr early — still covers restock window)
+  name                = "${local.name_prefix}-target-burst"
+  schedule_expression = "cron(55 6 * * ? *)"
   state               = "ENABLED"
 }
 
 resource "aws_cloudwatch_event_target" "target_burst" {
-  for_each = aws_cloudwatch_event_rule.target_burst
-
-  rule     = each.value.name
+  rule     = aws_cloudwatch_event_rule.target_burst.name
   arn      = aws_ecs_cluster.main.arn
   role_arn = aws_iam_role.eventbridge.arn
 
@@ -832,12 +829,99 @@ resource "aws_cloudwatch_event_target" "target_burst" {
       {
         name = "poketracker"
         environment = [
-          { name = "POKETRACKER_BURST_DURATION_SECONDS", value = "600" },
-          { name = "POKETRACKER_BURST_INTERVAL_SECONDS", value = "10" }
+          { name = "POKETRACKER_BURST_DURATION_SECONDS", value = "7800" },
+          { name = "POKETRACKER_BURST_INTERVAL_SECONDS", value = "5" }
         ]
       }
     ]
   })
 
   depends_on = [aws_iam_role_policy.eventbridge]
+}
+
+resource "aws_cloudwatch_metric_alarm" "target_checkout_browser_recovery" {
+  count               = local.target_checkout_browser_enabled ? 1 : 0
+  alarm_name          = "${local.name_prefix}-target-checkout-browser-recovery"
+  alarm_description   = "Auto-recover the Target checkout Chrome instance on system status check failure."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "StatusCheckFailed_System"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  alarm_actions       = ["arn:aws:automate:${var.aws_region}:ec2:recover"]
+
+  dimensions = {
+    InstanceId = aws_instance.target_checkout_browser[0].id
+  }
+}
+
+resource "aws_iam_role" "ec2_scheduler" {
+  count = local.target_checkout_browser_enabled ? 1 : 0
+  name  = "${local.name_prefix}-ec2-scheduler"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "scheduler.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ec2_scheduler" {
+  count = local.target_checkout_browser_enabled ? 1 : 0
+  name  = "${local.name_prefix}-ec2-scheduler"
+  role  = aws_iam_role.ec2_scheduler[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ec2:StartInstances", "ec2:StopInstances"]
+      Resource = aws_instance.target_checkout_browser[0].arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "ec2_start" {
+  count = local.target_checkout_browser_enabled ? 1 : 0
+  name  = "${local.name_prefix}-ec2-start"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  # 6:15 UTC = 1:15 AM CDT (UTC-5) / 12:15 AM CST (UTC-6)
+  # 10 min before session refresh (6:25 UTC), 40 min before burst (6:55 UTC).
+  schedule_expression = "cron(15 6 * * ? *)"
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ec2:startInstances"
+    role_arn = aws_iam_role.ec2_scheduler[0].arn
+    input    = jsonencode({ InstanceIds = [aws_instance.target_checkout_browser[0].id] })
+  }
+}
+
+resource "aws_scheduler_schedule" "ec2_stop" {
+  count = local.target_checkout_browser_enabled ? 1 : 0
+  name  = "${local.name_prefix}-ec2-stop"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  # 9:20 UTC = 4:20 AM CDT (UTC-5) / 3:20 AM CST (UTC-6)
+  # 15 min after burst ends (6:55 UTC + 130 min = 9:05 UTC).
+  schedule_expression = "cron(20 9 * * ? *)"
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ec2:stopInstances"
+    role_arn = aws_iam_role.ec2_scheduler[0].arn
+    input    = jsonencode({ InstanceIds = [aws_instance.target_checkout_browser[0].id] })
+  }
 }

@@ -118,14 +118,26 @@ def _execute_purchase(request: PurchaseRequest, profile: dict[str, Any], *, veri
     target_cdp_url = os.environ.get("TARGET_CDP_URL")
     target_credentials = _load_target_credentials()
     if target_cdp_url:
-        result = purchase_target_item_from_cdp(
-            target_cdp_url,
-            request,
-            profile,
-            place_order_enabled=_target_place_order_enabled(),
-            target_credentials=target_credentials,
-            verify_only=verify_only,
-        )
+        try:
+            result = purchase_target_item_from_cdp(
+                target_cdp_url,
+                request,
+                profile,
+                place_order_enabled=_target_place_order_enabled(),
+                target_credentials=target_credentials,
+                verify_only=verify_only,
+            )
+        except CheckoutWebhookError:
+            raise
+        except Exception:
+            # CDP connection failed (EC2 stopped or unreachable) — fall back to headless Playwright.
+            result = purchase_target_item(
+                request,
+                profile,
+                target_session_json=_load_secret(os.environ.get("TARGET_SESSION_SECRET_ARN")),
+                target_credentials=target_credentials,
+                verify_only=verify_only,
+            )
     else:
         result = purchase_target_item(
             request,

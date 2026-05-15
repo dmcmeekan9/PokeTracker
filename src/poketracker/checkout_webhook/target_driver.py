@@ -267,7 +267,7 @@ def _new_target_context(browser: Any, storage_state: dict[str, Any]) -> Any:
 
 def _goto_target_page(page: Any, url: str, timeout: int = 15000) -> None:
     page.goto(url, wait_until="commit", timeout=timeout)
-    page.wait_for_timeout(750)
+    page.wait_for_timeout(300)
 
 
 def _click_first(page: Any, labels: list[str], step: str, optional: bool = False) -> bool:
@@ -282,7 +282,7 @@ def _click_first(page: Any, labels: list[str], step: str, optional: bool = False
             except Exception:
                 continue
         _stop_on_intervention(_page_content(page))
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
     if optional:
         return False
     _write_debug_artifacts(page, step)
@@ -348,7 +348,7 @@ def _verify_click_candidate_present(page: Any, labels: list[str], step: str) -> 
             except Exception:
                 continue
         _stop_on_intervention(_page_content(page))
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
     _write_debug_artifacts(page, step)
     raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
 
@@ -497,7 +497,7 @@ def _click_first_without_intervention(page: Any, labels: list[str], *, optional:
                     return True
                 except Exception:
                     continue
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
     if optional:
         return False
     _write_debug_artifacts(page, "target_auto_login_click")
@@ -678,13 +678,13 @@ def _wait_for_checkout_ready(
         normalized = re.sub(r"\s+", " ", text.lower())
         on_cart = "cart" in page.url and "checkout" not in page.url
         if on_cart:
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(400)
             continue
         if postal_code and postal_code in text:
             return
         if re.search(r"place\s+(?:your\s+)?order|submit\s+order|order summary|payment", normalized):
             return
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(400)
 
 
 def _page_text(page: Any) -> str:

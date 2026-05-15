@@ -28,8 +28,8 @@ jobs:
       TF_VAR_email_footer_gif_url: ${{ vars.EMAIL_FOOTER_GIF_URL || 'https://www.gifcen.com/wp-content/uploads/2023/03/-8.gif' }}
       TF_VAR_checkout_webhook_url: ${{ vars.CHECKOUT_WEBHOOK_URL }}
       TF_VAR_target_place_order_enabled: ${{ vars.TARGET_PLACE_ORDER_ENABLED || 'true' }}
-      TF_VAR_target_session_refresh_enabled: ${{ vars.TARGET_SESSION_REFRESH_ENABLED || 'false' }}
-      TF_VAR_target_session_refresh_schedule_expression: ${{ vars.TARGET_SESSION_REFRESH_SCHEDULE_EXPRESSION || 'cron(45 6,7 * * ? *)' }}
+      TF_VAR_target_session_refresh_enabled: ${{ vars.TARGET_SESSION_REFRESH_ENABLED || 'true' }}
+      TF_VAR_target_session_refresh_schedule_expression: ${{ vars.TARGET_SESSION_REFRESH_SCHEDULE_EXPRESSION || 'cron(25 6 * * ? *)' }}
       TF_VAR_target_session_verify_url: ${{ vars.TARGET_SESSION_VERIFY_URL }}
       TF_VAR_target_checkout_browser_enabled: ${{ vars.TARGET_CHECKOUT_BROWSER_ENABLED || 'true' }}
       TF_VAR_target_checkout_browser_instance_type: ${{ vars.TARGET_CHECKOUT_BROWSER_INSTANCE_TYPE || 'c7i.large' }}

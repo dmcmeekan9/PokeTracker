@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import boto3
@@ -11,7 +12,7 @@ from botocore.exceptions import ClientError
 from poketracker.checkout.base import CheckoutAdapter
 from poketracker.checkout.dry_run import DryRunCheckoutAdapter, UnconfiguredCheckoutAdapter
 from poketracker.checkout.http import HttpCheckoutAdapter
-from poketracker.models import DecisionType, Retailer, WatchlistItem
+from poketracker.models import DecisionType, Retailer, StockSignal, WatchlistItem
 from poketracker.notify.email import SesNotifier
 from poketracker.rules.engine import RulesEngine, current_week_start_iso
 from poketracker.signals.base import SignalAdapter
@@ -61,13 +62,11 @@ def run_once() -> None:
     enabled_items = [item for item in config.items if item.enabled]
     LOGGER.info("checking %s enabled items", len(enabled_items))
 
-    for item in enabled_items:
-        adapter = adapters.get(item.retailer)
-        if adapter is None:
-            LOGGER.warning("no adapter for retailer=%s item_id=%s", item.retailer.value, item.id)
+    signals = _fetch_signals(enabled_items, adapters)
+    for item, signal in signals:
+        if signal is None:
             continue
         try:
-            signal = adapter.check(item)
             store.record_signal(signal)
             weekly_spend = store.weekly_purchase_spend(week_start)
             decision = engine.evaluate(signal, weekly_spend)
@@ -99,6 +98,25 @@ def run_once() -> None:
                 LOGGER.info("sent %s alert for %s", decision.type.value, item.id)
             else:
                 LOGGER.info("alert suppressed by cooldown for %s", decision.alert_key)
+
+
+def _fetch_signals(
+    items: list[WatchlistItem],
+    adapters: dict[Retailer, SignalAdapter],
+) -> list[tuple[WatchlistItem, StockSignal | None]]:
+    def _check_one(item: WatchlistItem) -> tuple[WatchlistItem, StockSignal | None]:
+        adapter = adapters.get(item.retailer)
+        if adapter is None:
+            LOGGER.warning("no adapter for retailer=%s item_id=%s", item.retailer.value, item.id)
+            return item, None
+        try:
+            return item, adapter.check(item)
+        except Exception:
+            LOGGER.exception("signal fetch failed softly: %s", item.id)
+            return item, None
+
+    with ThreadPoolExecutor(max_workers=len(items) or 1) as pool:
+        return list(pool.map(_check_one, items))
 
 
 def _build_adapters(bestbuy_api_key: str | None) -> dict[Retailer, SignalAdapter]:

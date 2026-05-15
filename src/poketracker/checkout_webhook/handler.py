@@ -126,6 +126,7 @@ def _execute_purchase(request: PurchaseRequest, profile: dict[str, Any], *, veri
                 place_order_enabled=_target_place_order_enabled(),
                 target_credentials=target_credentials,
                 verify_only=verify_only,
+                target_session_json=_load_secret(os.environ.get("TARGET_SESSION_SECRET_ARN")),
             )
         except CheckoutWebhookError:
             raise

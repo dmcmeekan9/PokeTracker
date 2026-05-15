@@ -94,6 +94,7 @@ def test_purchase_target_item_from_cdp_uses_attached_browser(monkeypatch) -> Non
     monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_api)
     monkeypatch.setattr(local_target_buyer, "_page_content", lambda page: "<main>ready</main>")
     monkeypatch.setattr(local_target_buyer, "_stop_on_intervention", lambda html: None)
+    monkeypatch.setattr(local_target_buyer, "_add_to_cart", lambda page, url, target_credentials: None)
     monkeypatch.setattr(local_target_buyer, "_click_first", lambda page, labels, step, optional=False: True)
     monkeypatch.setattr(
         local_target_buyer,
@@ -141,6 +142,7 @@ def test_purchase_target_item_from_cdp_verify_only_stops_before_order(monkeypatc
     monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_api)
     monkeypatch.setattr(local_target_buyer, "_page_content", lambda page: "<main>ready</main>")
     monkeypatch.setattr(local_target_buyer, "_stop_on_intervention", lambda html: None)
+    monkeypatch.setattr(local_target_buyer, "_add_to_cart", lambda page, url, target_credentials: None)
     monkeypatch.setattr(local_target_buyer, "_click_first", lambda page, labels, step, optional=False: True)
     monkeypatch.setattr(
         local_target_buyer,

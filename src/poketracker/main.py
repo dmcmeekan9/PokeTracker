@@ -63,6 +63,10 @@ def run_once() -> None:
     LOGGER.info("checking %s enabled items", len(enabled_items))
 
     signals = _fetch_signals(enabled_items, adapters)
+
+    # Evaluate all signals first; collect items that need a checkout attempt.
+    pending: list[tuple[WatchlistItem, Any]] = []
+    completed: list[tuple[WatchlistItem, Any]] = []
     for item, signal in signals:
         if signal is None:
             continue
@@ -78,7 +82,29 @@ def run_once() -> None:
                         reason="item already has a recorded v2 purchase this week",
                         weekly_spend_after=weekly_spend,
                     )
-            decision = checkout.execute(decision)
+            if decision.type == DecisionType.WOULD_BUY:
+                pending.append((item, decision))
+            else:
+                completed.append((item, decision))
+        except Exception:
+            LOGGER.exception("item failed softly: %s", item.id)
+
+    # Execute all checkouts concurrently so simultaneous restocks are all attempted.
+    if pending:
+        def _execute_checkout(args: tuple[WatchlistItem, Any]) -> tuple[WatchlistItem, Any]:
+            item, decision = args
+            try:
+                return item, checkout.execute(decision)
+            except Exception:
+                LOGGER.exception("checkout execute failed softly: %s", item.id)
+                return item, decision
+
+        with ThreadPoolExecutor(max_workers=len(pending)) as pool:
+            completed.extend(pool.map(_execute_checkout, pending))
+
+    # Record decisions and send alerts.
+    for item, decision in completed:
+        try:
             store.record_decision(decision)
             if decision.type == DecisionType.PURCHASED:
                 store.record_purchase(decision, week_start)

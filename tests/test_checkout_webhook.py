@@ -217,6 +217,8 @@ def test_target_uses_cdp_browser_when_configured(monkeypatch) -> None:
             return "secret"
         if secret_arn == "profile-secret":
             return json.dumps(profile())
+        if secret_arn == "session-secret":
+            return json.dumps({"cookies": [], "origins": []})
         raise AssertionError(f"unexpected secret load: {secret_arn}")
 
     class Result:
@@ -251,6 +253,8 @@ def test_target_passes_credentials_to_cdp_browser(monkeypatch) -> None:
     captured = {}
 
     def load_secret(secret_arn):
+        if not secret_arn:
+            return None
         if secret_arn == "token-secret":
             return "secret"
         if secret_arn == "profile-secret":

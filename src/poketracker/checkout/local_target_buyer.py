@@ -15,14 +15,17 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from poketracker.checkout.profile import load_checkout_profile
 from poketracker.checkout.target_credentials import TargetCredentials
 from poketracker.checkout.target_session import capture_target_session_from_cdp, upload_storage_state_secret
+from poketracker.checkout.target_storage_state import decode_storage_state_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 from poketracker.checkout_webhook.target_driver import (
     TargetCheckoutResult,
+    _add_to_cart,
     _click_first,
     _click_first_with_auto_login,
     _extract_order_id,
     _ensure_target_signed_in,
     _goto_target_page,
+    _new_target_context,
     _page_content,
     _page_indicates_cart_has_item,
     _resume_checkout_after_sign_in,
@@ -146,6 +149,7 @@ def purchase_target_item_from_cdp(
     place_order_enabled: bool,
     target_credentials: TargetCredentials | None = None,
     verify_only: bool = False,
+    target_session_json: str | None = None,
 ) -> TargetCheckoutResult:
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -156,19 +160,21 @@ def purchase_target_item_from_cdp(
     with sync_playwright() as playwright:
         browser = playwright.chromium.connect_over_cdp(cdp_url)
         try:
-            context = browser.contexts[0] if browser.contexts else browser.new_context()
-            page = context.pages[0] if context.pages else context.new_page()
+            # When a session is provided, create an isolated context so multiple
+            # simultaneous checkouts don't share the same browser tab.
+            if target_session_json:
+                storage_state = decode_storage_state_secret(target_session_json)
+                context = _new_target_context(browser, storage_state)
+                own_context = True
+            else:
+                context = browser.contexts[0] if browser.contexts else browser.new_context()
+                own_context = False
+            page = context.new_page() if own_context else (context.pages[0] if context.pages else context.new_page())
             try:
                 _goto_target_page(page, request.url)
                 _ensure_target_signed_in(page, target_credentials)
                 _stop_on_intervention(_page_content(page))
-                if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
-                    if not _page_indicates_cart_has_item(_page_content(page)):
-                        raise CheckoutWebhookError(
-                            409,
-                            "target_add_to_cart_not_found",
-                            "Target checkout could not find the add_to_cart control",
-                        )
+                _add_to_cart(page, request.url, target_credentials)
                 _click_first(page, [r"view cart", r"checkout", r"check\s*out", r"cart"], "cart_or_checkout", optional=True)
                 if "cart" not in page.url and "checkout" not in page.url:
                     _goto_target_page(page, "https://www.target.com/cart")
@@ -224,6 +230,9 @@ def purchase_target_item_from_cdp(
                 )
             except PlaywrightTimeoutError as exc:
                 raise CheckoutWebhookError(504, "target_timeout", f"Target checkout timed out: {exc}") from exc
+            finally:
+                if own_context:
+                    context.close()
         finally:
             # For CDP this disconnects Playwright from Chrome; the user's browser remains open.
             browser.close()

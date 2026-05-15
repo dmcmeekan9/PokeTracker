@@ -77,13 +77,7 @@ def purchase_target_item(
             _dismiss_target_overlays(page)
             _ensure_target_signed_in(page, target_credentials)
             _stop_on_intervention(_page_content(page))
-            if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
-                if not _page_indicates_cart_has_item(_page_content(page)):
-                    raise CheckoutWebhookError(
-                        409,
-                        "target_add_to_cart_not_found",
-                        "Target checkout could not find the add_to_cart control",
-                    )
+            _add_to_cart(page, request.url, target_credentials)
             _click_first(page, [r"view cart", r"checkout", r"check\s*out", r"cart"], "cart_or_checkout", optional=True)
             if "cart" not in page.url and "checkout" not in page.url:
                 _goto_target_page(page, "https://www.target.com/cart")
@@ -303,6 +297,19 @@ def _click_first_with_auto_login(
             raise
         _ensure_target_signed_in(page, target_credentials)
         return True
+
+
+def _add_to_cart(page: Any, url: str, target_credentials: TargetCredentials | None) -> None:
+    for attempt in range(2):
+        if attempt > 0:
+            _goto_target_page(page, url)
+            _ensure_target_signed_in(page, target_credentials)
+            _stop_on_intervention(_page_content(page))
+        if _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
+            return
+        if _page_indicates_cart_has_item(_page_content(page)):
+            return
+    raise CheckoutWebhookError(409, "target_add_to_cart_not_found", "Target checkout could not find the add_to_cart control")
 
 
 def _resume_checkout_after_sign_in(page: Any, target_credentials: TargetCredentials | None) -> None:

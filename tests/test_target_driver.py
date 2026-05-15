@@ -3,8 +3,10 @@ from __future__ import annotations
 import pytest
 
 from poketracker.checkout.target_storage_state import decode_storage_state_secret, encode_storage_state_for_secret
+from poketracker.checkout.target_credentials import TargetCredentials
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError
 from poketracker.checkout_webhook.target_driver import (
+    _click_first_with_auto_login,
     _dismiss_target_overlays,
     _page_indicates_cart_has_item,
     _set_target_quantity,
@@ -153,6 +155,24 @@ def test_verify_click_candidate_present_does_not_click() -> None:
 
     assert page.control.waited is True
     assert page.control.clicked is False
+
+
+def test_click_first_with_auto_login_recovers_sign_in(monkeypatch) -> None:
+    recovered = {}
+
+    def sign_in_required(*_args, **_kwargs):
+        raise CheckoutWebhookError(409, "sign_in_required", "Target checkout requires intervention: sign_in_required")
+
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver._click_first", sign_in_required)
+    monkeypatch.setattr(
+        "poketracker.checkout_webhook.target_driver._ensure_target_signed_in",
+        lambda page, credentials: recovered.update({"credentials": credentials}),
+    )
+
+    credentials = TargetCredentials(username="target@example.com", password="password")
+
+    assert _click_first_with_auto_login(object(), [r"checkout"], "checkout", credentials, optional=True) is True
+    assert recovered == {"credentials": credentials}
 
 
 class MissingControl:

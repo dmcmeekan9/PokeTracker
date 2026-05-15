@@ -91,7 +91,13 @@ def purchase_target_item(
             _stop_on_intervention(_page_content(page))
             _select_standard_shipping(page)
             actual_quantity = _set_target_quantity(page, request.quantity)
-            _click_first(page, [r"checkout", r"check\s*out", r"sign in to check out"], "checkout", optional=True)
+            _click_first_with_auto_login(
+                page,
+                [r"checkout", r"check\s*out", r"sign in to check out"],
+                "checkout",
+                target_credentials,
+                optional=True,
+            )
             _ensure_target_signed_in(page, target_credentials)
             _wait_for_checkout_ready(page, profile, target_credentials=target_credentials)
             _stop_on_intervention(_page_content(page))
@@ -280,6 +286,22 @@ def _click_first(page: Any, labels: list[str], step: str, optional: bool = False
         return False
     _write_debug_artifacts(page, step)
     raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
+
+
+def _click_first_with_auto_login(
+    page: Any,
+    labels: list[str],
+    step: str,
+    target_credentials: TargetCredentials | None,
+    optional: bool = False,
+) -> bool:
+    try:
+        return _click_first(page, labels, step, optional=optional)
+    except CheckoutWebhookError as exc:
+        if exc.status != "sign_in_required" or target_credentials is None:
+            raise
+        _ensure_target_signed_in(page, target_credentials)
+        return True
 
 
 def _verify_click_candidate_present(page: Any, labels: list[str], step: str) -> None:

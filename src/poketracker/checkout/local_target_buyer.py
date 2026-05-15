@@ -19,6 +19,7 @@ from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, Pur
 from poketracker.checkout_webhook.target_driver import (
     TargetCheckoutResult,
     _click_first,
+    _click_first_with_auto_login,
     _extract_order_id,
     _ensure_target_signed_in,
     _goto_target_page,
@@ -174,7 +175,13 @@ def purchase_target_item_from_cdp(
                 _stop_on_intervention(_page_content(page))
                 _select_standard_shipping(page)
                 actual_quantity = _set_target_quantity(page, request.quantity)
-                _click_first(page, [r"checkout", r"check\s*out", r"sign in to check out"], "checkout", optional=True)
+                _click_first_with_auto_login(
+                    page,
+                    [r"checkout", r"check\s*out", r"sign in to check out"],
+                    "checkout",
+                    target_credentials,
+                    optional=True,
+                )
                 _ensure_target_signed_in(page, target_credentials)
                 _wait_for_checkout_ready(page, profile, target_credentials=target_credentials)
                 _stop_on_intervention(_page_content(page))

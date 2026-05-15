@@ -18,7 +18,7 @@ TARGET_USER_AGENT = (
 )
 CLICK_STEP_DEADLINES = {
     "add_to_cart": 12,
-    "cart_or_checkout": 5,
+    "cart_or_checkout": 2,
     "checkout": 8,
     "place_order": 10,
     "quantity_increment": 5,

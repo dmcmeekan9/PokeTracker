@@ -100,6 +100,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "iam:ListInstanceProfilesForRole",
           "iam:ListPolicyVersions",
           "iam:ListRolePolicies",
+          "iam:CreateServiceLinkedRole",
           "iam:PassRole",
           "iam:PutRolePolicy",
           "iam:RemoveRoleFromInstanceProfile",
@@ -110,6 +111,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "iam:UpdateAssumeRolePolicy",
           "lambda:*",
           "logs:*",
+          "scheduler:*",
           "secretsmanager:*",
           "ses:*",
           "ssm:GetParameter"

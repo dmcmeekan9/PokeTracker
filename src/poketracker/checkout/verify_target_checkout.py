@@ -8,7 +8,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import boto3
+
 from poketracker.checkout.profile import load_checkout_profile
+from poketracker.checkout.target_credentials import decode_target_credentials_secret
 from poketracker.checkout.target_storage_state import encode_storage_state_for_secret
 from poketracker.checkout.local_target_buyer import purchase_target_item_from_cdp
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
@@ -31,6 +34,12 @@ def main() -> None:
     parser.add_argument("--msrp", default="1.00", help="MSRP for explicit --url.")
     parser.add_argument("--debug-output-dir", help="Write checkout page debug artifacts when verification fails.")
     parser.add_argument("--cdp-url", help="Verify through an already-open debug Chrome instead of launching headless.")
+    parser.add_argument(
+        "--target-credentials-secret-id",
+        default=os.environ.get("TARGET_CREDENTIALS_SECRET_ARN") or os.environ.get("TARGET_CREDENTIALS_SECRET_ID"),
+        help="Optional Secrets Manager secret id or ARN for Target auto-login during CDP verification.",
+    )
+    parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-east-1"), help="AWS region for secrets.")
     args = parser.parse_args()
 
     try:
@@ -38,12 +47,14 @@ def main() -> None:
             os.environ["TARGET_CHECKOUT_DEBUG_DIR"] = args.debug_output_dir
         profile = load_checkout_profile(args.profile)
         request = _request_from_args(args)
+        target_credentials = _load_target_credentials(args.target_credentials_secret_id, args.region)
         if args.cdp_url:
             result = purchase_target_item_from_cdp(
                 args.cdp_url,
                 request,
                 profile,
                 place_order_enabled=False,
+                target_credentials=target_credentials,
                 verify_only=True,
             )
         else:
@@ -52,6 +63,7 @@ def main() -> None:
                 request,
                 profile,
                 encode_storage_state_for_secret(json.loads(session_json)),
+                target_credentials=target_credentials,
                 verify_only=True,
             )
     except CheckoutWebhookError as exc:
@@ -105,6 +117,14 @@ def _request_from_args(args: Any) -> PurchaseRequest:
     if args.item_id:
         raise ValueError(f"no enabled Target watchlist item found for --item-id {args.item_id}")
     raise ValueError("no enabled Target watchlist item found")
+
+
+def _load_target_credentials(secret_id: str | None, region: str) -> Any:
+    if not secret_id:
+        return None
+    client = boto3.client("secretsmanager", region_name=region)
+    response = client.get_secret_value(SecretId=secret_id)
+    return decode_target_credentials_secret(response.get("SecretString"))
 
 
 if __name__ == "__main__":

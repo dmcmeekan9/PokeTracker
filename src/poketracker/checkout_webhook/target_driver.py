@@ -99,6 +99,7 @@ def purchase_target_item(
                 optional=True,
             )
             _ensure_target_signed_in(page, target_credentials)
+            _resume_checkout_after_sign_in(page, target_credentials)
             _wait_for_checkout_ready(page, profile, target_credentials=target_credentials)
             _stop_on_intervention(_page_content(page))
 
@@ -304,6 +305,38 @@ def _click_first_with_auto_login(
         return True
 
 
+def _resume_checkout_after_sign_in(page: Any, target_credentials: TargetCredentials | None) -> None:
+    if "cart" not in page.url or "checkout" in page.url:
+        return
+
+    for _ in range(3):
+        _ensure_target_signed_in(page, target_credentials)
+        if "cart" not in page.url or "checkout" in page.url:
+            return
+
+        _click_first_with_auto_login(
+            page,
+            [r"checkout", r"check\s*out", r"sign in to check out"],
+            "checkout",
+            target_credentials,
+            optional=True,
+        )
+
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            html = _page_content(page)
+            if target_credentials is not None and _page_requires_sign_in(html):
+                _ensure_target_signed_in(page, target_credentials)
+                break
+            if "cart" not in page.url or "checkout" in page.url:
+                return
+            page.wait_for_timeout(500)
+
+    if "cart" in page.url and "checkout" not in page.url:
+        _goto_target_page(page, "https://www.target.com/checkout")
+        _ensure_target_signed_in(page, target_credentials)
+
+
 def _verify_click_candidate_present(page: Any, labels: list[str], step: str) -> None:
     deadline = time.monotonic() + _click_deadline_seconds(step, optional=False)
     while time.monotonic() < deadline:
@@ -366,26 +399,28 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
     if target_credentials is None or not _page_requires_sign_in(_page_content(page)):
         return False
 
-    _dismiss_target_overlays(page)
-    if not _fill_first(
-        page,
-        [
-            'input[name="username"]',
-            'input[id="username"]',
-            'input[type="email"]',
-            'input[autocomplete="username"]',
-            'input[id*="email" i]',
-            'input[name*="email" i]',
-            'input[id*="phone" i]',
-            'input[name*="phone" i]',
-        ],
-        [r"email", r"mobile phone", r"phone number", r"username"],
-        target_credentials.username,
-    ):
-        raise CheckoutWebhookError(409, "sign_in_required", "Target sign-in form did not expose the username field")
+    if _page_has_remembered_target_account(_page_text(page)):
+        _click_first_without_intervention(page, [r"enter your password", r"use password"], optional=True)
+    else:
+        if not _fill_first(
+            page,
+            [
+                'main input[name="username"]',
+                'main input[id="username"]',
+                'main input[type="email"]',
+                'main input[autocomplete="username"]',
+                '[role="dialog"] input[name="username"]',
+                '[role="dialog"] input[id="username"]',
+                '[role="dialog"] input[type="email"]',
+                '[role="dialog"] input[autocomplete="username"]',
+            ],
+            [r"email or mobile phone", r"mobile phone", r"phone number", r"username"],
+            target_credentials.username,
+        ):
+            raise CheckoutWebhookError(409, "sign_in_required", "Target sign-in form did not expose the username field")
 
-    if not _fill_password(page, target_credentials.password):
-        _click_first_without_intervention(page, [r"continue", r"next"], optional=True)
+        if not _fill_password(page, target_credentials.password):
+            _click_first_without_intervention(page, [r"continue", r"next"], optional=True)
     if not _fill_password_after_username(page, target_credentials.password):
         raise CheckoutWebhookError(409, "sign_in_required", "Target sign-in form did not expose the password field")
 
@@ -596,6 +631,11 @@ def _page_requires_human_intervention(html: str) -> bool:
     )
 
 
+def _page_has_remembered_target_account(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", text.lower())
+    return "not you?" in normalized and "enter your password" in normalized
+
+
 def _page_indicates_cart_has_item(html: str) -> bool:
     normalized = re.sub(r"\s+", " ", html.lower())
     return bool(re.search(r"\b\d+\s+in cart\b", normalized))
@@ -636,6 +676,10 @@ def _wait_for_checkout_ready(
         _stop_on_intervention(html)
         text = _page_text(page)
         normalized = re.sub(r"\s+", " ", text.lower())
+        on_cart = "cart" in page.url and "checkout" not in page.url
+        if on_cart:
+            page.wait_for_timeout(1000)
+            continue
         if postal_code and postal_code in text:
             return
         if re.search(r"place\s+(?:your\s+)?order|submit\s+order|order summary|payment", normalized):

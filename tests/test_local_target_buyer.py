@@ -100,6 +100,7 @@ def test_purchase_target_item_from_cdp_uses_attached_browser(monkeypatch) -> Non
         "_click_first_with_auto_login",
         lambda page, labels, step, target_credentials, optional=False: True,
     )
+    monkeypatch.setattr(local_target_buyer, "_resume_checkout_after_sign_in", lambda page, target_credentials: None)
     monkeypatch.setattr(local_target_buyer, "_page_indicates_cart_has_item", lambda html: False)
     monkeypatch.setattr(local_target_buyer, "_select_standard_shipping", lambda page: None)
     monkeypatch.setattr(local_target_buyer, "_set_target_quantity", lambda page, quantity: quantity)
@@ -146,6 +147,7 @@ def test_purchase_target_item_from_cdp_verify_only_stops_before_order(monkeypatc
         "_click_first_with_auto_login",
         lambda page, labels, step, target_credentials, optional=False: True,
     )
+    monkeypatch.setattr(local_target_buyer, "_resume_checkout_after_sign_in", lambda page, target_credentials: None)
     monkeypatch.setattr(local_target_buyer, "_page_indicates_cart_has_item", lambda html: False)
     monkeypatch.setattr(local_target_buyer, "_select_standard_shipping", lambda page: None)
     monkeypatch.setattr(local_target_buyer, "_set_target_quantity", lambda page, quantity: quantity)

@@ -8,7 +8,9 @@ from poketracker.checkout_webhook.handler_types import CheckoutWebhookError
 from poketracker.checkout_webhook.target_driver import (
     _click_first_with_auto_login,
     _dismiss_target_overlays,
+    _page_has_remembered_target_account,
     _page_indicates_cart_has_item,
+    _resume_checkout_after_sign_in,
     _set_target_quantity,
     _stop_on_intervention,
     _verify_click_candidate_present,
@@ -173,6 +175,36 @@ def test_click_first_with_auto_login_recovers_sign_in(monkeypatch) -> None:
 
     assert _click_first_with_auto_login(object(), [r"checkout"], "checkout", credentials, optional=True) is True
     assert recovered == {"credentials": credentials}
+
+
+def test_detects_remembered_target_account_prompt() -> None:
+    assert _page_has_remembered_target_account("pok*** Not you? Sign out\nEnter your password")
+    assert not _page_has_remembered_target_account("Email address\nSign up")
+
+
+class PageStillOnCart:
+    url = "https://www.target.com/cart"
+
+
+def test_resume_checkout_after_sign_in_clicks_checkout_again(monkeypatch) -> None:
+    calls = []
+    page = PageStillOnCart()
+
+    monkeypatch.setattr(
+        "poketracker.checkout_webhook.target_driver._click_first_with_auto_login",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or True,
+    )
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver._ensure_target_signed_in", lambda *args: None)
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver._page_content", lambda page: "<main>Cart</main>")
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver._goto_target_page", lambda page, url: setattr(page, "url", url))
+
+    page.wait_for_timeout = lambda timeout: None
+
+    _resume_checkout_after_sign_in(page, None)
+
+    assert calls
+    assert calls[0][0][2] == "checkout"
+    assert page.url == "https://www.target.com/checkout"
 
 
 class MissingControl:

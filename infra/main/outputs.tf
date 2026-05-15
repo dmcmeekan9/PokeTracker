@@ -42,6 +42,10 @@ output "target_session_secret_arn" {
   value = data.aws_secretsmanager_secret.target_session.arn
 }
 
+output "target_credentials_secret_arn" {
+  value = data.aws_secretsmanager_secret.target_credentials.arn
+}
+
 output "managed_checkout_webhook_url" {
   value = try(aws_lambda_function_url.checkout_webhook[0].function_url, "")
 }

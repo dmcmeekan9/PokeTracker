@@ -13,12 +13,14 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from poketracker.checkout.profile import load_checkout_profile
+from poketracker.checkout.target_credentials import TargetCredentials
 from poketracker.checkout.target_session import capture_target_session_from_cdp, upload_storage_state_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 from poketracker.checkout_webhook.target_driver import (
     TargetCheckoutResult,
     _click_first,
     _extract_order_id,
+    _ensure_target_signed_in,
     _goto_target_page,
     _page_content,
     _page_indicates_cart_has_item,
@@ -140,6 +142,7 @@ def purchase_target_item_from_cdp(
     profile: dict[str, Any],
     *,
     place_order_enabled: bool,
+    target_credentials: TargetCredentials | None = None,
     verify_only: bool = False,
 ) -> TargetCheckoutResult:
     try:
@@ -155,6 +158,7 @@ def purchase_target_item_from_cdp(
             page = context.pages[0] if context.pages else context.new_page()
             try:
                 _goto_target_page(page, request.url)
+                _ensure_target_signed_in(page, target_credentials)
                 _stop_on_intervention(_page_content(page))
                 if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
                     if not _page_indicates_cart_has_item(_page_content(page)):
@@ -166,11 +170,13 @@ def purchase_target_item_from_cdp(
                 _click_first(page, [r"view cart", r"checkout", r"check\s*out", r"cart"], "cart_or_checkout", optional=True)
                 if "cart" not in page.url and "checkout" not in page.url:
                     _goto_target_page(page, "https://www.target.com/cart")
+                _ensure_target_signed_in(page, target_credentials)
                 _stop_on_intervention(_page_content(page))
                 _select_standard_shipping(page)
                 actual_quantity = _set_target_quantity(page, request.quantity)
                 _click_first(page, [r"checkout", r"check\s*out", r"sign in to check out"], "checkout", optional=True)
-                _wait_for_checkout_ready(page, profile)
+                _ensure_target_signed_in(page, target_credentials)
+                _wait_for_checkout_ready(page, profile, target_credentials=target_credentials)
                 _stop_on_intervention(_page_content(page))
 
                 if verify_only:
@@ -184,6 +190,7 @@ def purchase_target_item_from_cdp(
                         order_id=None,
                         message="local Target checkout reached the final place-order control; no order was placed",
                         quantity=actual_quantity,
+                        storage_state=_context_storage_state(context),
                     )
 
                 _verify_checkout_profile_visible(_page_content(page), profile, page)
@@ -204,12 +211,20 @@ def purchase_target_item_from_cdp(
                     order_id=_extract_order_id(confirmation_html),
                     message="Target checkout completed from local Chrome",
                     quantity=actual_quantity,
+                    storage_state=_context_storage_state(context),
                 )
             except PlaywrightTimeoutError as exc:
                 raise CheckoutWebhookError(504, "target_timeout", f"Target checkout timed out: {exc}") from exc
         finally:
             # For CDP this disconnects Playwright from Chrome; the user's browser remains open.
             browser.close()
+
+
+def _context_storage_state(context: Any) -> dict[str, Any] | None:
+    try:
+        return context.storage_state()
+    except Exception:
+        return None
 
 
 def _default_verify_url(config: Any) -> str | None:

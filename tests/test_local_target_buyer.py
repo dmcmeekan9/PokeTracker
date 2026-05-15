@@ -98,7 +98,7 @@ def test_purchase_target_item_from_cdp_uses_attached_browser(monkeypatch) -> Non
     monkeypatch.setattr(local_target_buyer, "_page_indicates_cart_has_item", lambda html: False)
     monkeypatch.setattr(local_target_buyer, "_select_standard_shipping", lambda page: None)
     monkeypatch.setattr(local_target_buyer, "_set_target_quantity", lambda page, quantity: quantity)
-    monkeypatch.setattr(local_target_buyer, "_wait_for_checkout_ready", lambda page, profile: None)
+    monkeypatch.setattr(local_target_buyer, "_wait_for_checkout_ready", lambda page, profile, **kwargs: None)
     monkeypatch.setattr(local_target_buyer, "_verify_checkout_profile_visible", lambda html, profile, *args: None)
     monkeypatch.setattr(local_target_buyer, "_extract_order_id", lambda html: "ABC123")
 
@@ -139,7 +139,7 @@ def test_purchase_target_item_from_cdp_verify_only_stops_before_order(monkeypatc
     monkeypatch.setattr(local_target_buyer, "_page_indicates_cart_has_item", lambda html: False)
     monkeypatch.setattr(local_target_buyer, "_select_standard_shipping", lambda page: None)
     monkeypatch.setattr(local_target_buyer, "_set_target_quantity", lambda page, quantity: quantity)
-    monkeypatch.setattr(local_target_buyer, "_wait_for_checkout_ready", lambda page, profile: None)
+    monkeypatch.setattr(local_target_buyer, "_wait_for_checkout_ready", lambda page, profile, **kwargs: None)
     monkeypatch.setattr(local_target_buyer, "_verify_checkout_profile_visible", lambda html, profile, *args: None)
     verified = {}
     monkeypatch.setattr(

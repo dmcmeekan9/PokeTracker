@@ -243,6 +243,44 @@ def test_target_uses_cdp_browser_when_configured(monkeypatch) -> None:
     assert captured["kwargs"]["place_order_enabled"] is False
 
 
+def test_target_passes_credentials_to_cdp_browser(monkeypatch) -> None:
+    monkeypatch.setenv("CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN", "token-secret")
+    monkeypatch.setenv("CHECKOUT_PROFILE_SECRET_ARN", "profile-secret")
+    monkeypatch.setenv("TARGET_CREDENTIALS_SECRET_ARN", "credentials-secret")
+    monkeypatch.setenv("TARGET_CDP_URL", "http://10.42.0.10:9222")
+    captured = {}
+
+    def load_secret(secret_arn):
+        if secret_arn == "token-secret":
+            return "secret"
+        if secret_arn == "profile-secret":
+            return json.dumps(profile())
+        if secret_arn == "credentials-secret":
+            return json.dumps({"username": "target@example.com", "password": "password"})
+        raise AssertionError(f"unexpected secret load: {secret_arn}")
+
+    class Result:
+        status = "ready_to_place_order"
+        order_id = None
+        message = "Target checkout reached the final place-order control; no order was placed"
+        quantity = 1
+
+    def purchase_target_item_from_cdp(*args, **kwargs):
+        _ = args
+        captured.update(kwargs)
+        return Result()
+
+    raw = payload()
+    raw["verify_only"] = True
+    monkeypatch.setattr(handler, "_load_secret", load_secret)
+    monkeypatch.setattr(handler, "purchase_target_item_from_cdp", purchase_target_item_from_cdp)
+
+    response = handler.lambda_handler(event(raw), None)
+
+    assert response["statusCode"] == 200
+    assert captured["target_credentials"].username == "target@example.com"
+
+
 def test_rejects_non_boolean_verify_only(monkeypatch) -> None:
     monkeypatch.setenv("CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN", "token-secret")
     monkeypatch.setattr(handler, "_load_secret", lambda secret_arn: "secret")

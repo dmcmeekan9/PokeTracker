@@ -160,6 +160,10 @@ data "aws_secretsmanager_secret" "target_session" {
   name = "${local.name_prefix}-target-session"
 }
 
+data "aws_secretsmanager_secret" "target_credentials" {
+  name = "${local.name_prefix}-target-credentials"
+}
+
 resource "aws_vpc" "main" {
   cidr_block           = "10.42.0.0/16"
   enable_dns_hostnames = true
@@ -253,9 +257,9 @@ resource "aws_security_group" "vpc_endpoint" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
+    from_port = 443
+    to_port   = 443
+    protocol  = "tcp"
     security_groups = [
       aws_security_group.checkout_webhook_lambda[0].id,
       aws_security_group.task.id
@@ -404,7 +408,8 @@ resource "aws_iam_role_policy" "checkout_webhook" {
         Resource = [
           data.aws_secretsmanager_secret.checkout_webhook_token.arn,
           data.aws_secretsmanager_secret.checkout_profile.arn,
-          data.aws_secretsmanager_secret.target_session.arn
+          data.aws_secretsmanager_secret.target_session.arn,
+          data.aws_secretsmanager_secret.target_credentials.arn
         ]
       }
     ]
@@ -582,6 +587,7 @@ resource "aws_lambda_function" "checkout_webhook" {
       CHECKOUT_PROFILE_SECRET_ARN       = data.aws_secretsmanager_secret.checkout_profile.arn
       TARGET_CDP_URL                    = local.target_checkout_browser_enabled ? "http://${aws_instance.target_checkout_browser[0].private_ip}:9222" : ""
       TARGET_SESSION_SECRET_ARN         = data.aws_secretsmanager_secret.target_session.arn
+      TARGET_CREDENTIALS_SECRET_ARN     = data.aws_secretsmanager_secret.target_credentials.arn
       TARGET_SESSION_VERIFY_URL         = var.target_session_verify_url
       TARGET_PLACE_ORDER_ENABLED        = tostring(var.target_place_order_enabled)
     }
@@ -618,8 +624,18 @@ resource "aws_lambda_function" "target_session_refresh" {
 
   environment {
     variables = {
-      TARGET_SESSION_SECRET_ARN = data.aws_secretsmanager_secret.target_session.arn
-      TARGET_SESSION_VERIFY_URL = var.target_session_verify_url
+      TARGET_SESSION_SECRET_ARN     = data.aws_secretsmanager_secret.target_session.arn
+      TARGET_CREDENTIALS_SECRET_ARN = data.aws_secretsmanager_secret.target_credentials.arn
+      TARGET_CDP_URL                = local.target_checkout_browser_enabled ? "http://${aws_instance.target_checkout_browser[0].private_ip}:9222" : ""
+      TARGET_SESSION_VERIFY_URL     = var.target_session_verify_url
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = local.target_checkout_browser_enabled ? [1] : []
+    content {
+      subnet_ids         = [aws_subnet.public[0].id]
+      security_group_ids = [aws_security_group.checkout_webhook_lambda[0].id]
     }
   }
 
@@ -627,6 +643,7 @@ resource "aws_lambda_function" "target_session_refresh" {
     aws_iam_role_policy.github_actions,
     aws_iam_role_policy_attachment.checkout_webhook_basic,
     aws_iam_role_policy_attachment.checkout_webhook_vpc_access,
+    aws_vpc_endpoint.secretsmanager,
   ]
 }
 

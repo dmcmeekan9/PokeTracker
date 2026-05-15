@@ -8,6 +8,7 @@ from typing import Any
 
 import boto3
 
+from poketracker.checkout.target_credentials import TargetCredentials, decode_target_credentials_secret
 from poketracker.checkout.target_storage_state import encode_storage_state_for_secret
 from poketracker.checkout.local_target_buyer import purchase_target_item_from_cdp
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
@@ -115,12 +116,14 @@ def _execute_purchase(request: PurchaseRequest, profile: dict[str, Any], *, veri
         raise CheckoutWebhookError(409, "unsupported_payment", "checkout profile payment retailer_account must be target")
 
     target_cdp_url = os.environ.get("TARGET_CDP_URL")
+    target_credentials = _load_target_credentials()
     if target_cdp_url:
         result = purchase_target_item_from_cdp(
             target_cdp_url,
             request,
             profile,
             place_order_enabled=_target_place_order_enabled(),
+            target_credentials=target_credentials,
             verify_only=verify_only,
         )
     else:
@@ -128,11 +131,12 @@ def _execute_purchase(request: PurchaseRequest, profile: dict[str, Any], *, veri
             request,
             profile,
             target_session_json=_load_secret(os.environ.get("TARGET_SESSION_SECRET_ARN")),
+            target_credentials=target_credentials,
             verify_only=verify_only,
         )
-        storage_state = getattr(result, "storage_state", None)
-        if storage_state:
-            _store_target_session(storage_state)
+    storage_state = getattr(result, "storage_state", None)
+    if storage_state:
+        _store_target_session(storage_state)
     return {
         "status": result.status,
         "order_id": result.order_id,
@@ -147,9 +151,19 @@ def _load_secret(secret_arn: str | None) -> str | None:
     client = boto3.client("secretsmanager", region_name=os.environ.get("AWS_REGION", "us-east-1"))
     try:
         response = client.get_secret_value(SecretId=secret_arn)
-    except client.exceptions.ResourceNotFoundException:
+    except (client.exceptions.ResourceNotFoundException, client.exceptions.InvalidRequestException):
         return None
     return response.get("SecretString")
+
+
+def _load_target_credentials() -> TargetCredentials | None:
+    secret_arn = os.environ.get("TARGET_CREDENTIALS_SECRET_ARN")
+    if not secret_arn:
+        return None
+    try:
+        return decode_target_credentials_secret(_load_secret(secret_arn))
+    except ValueError as exc:
+        raise CheckoutWebhookError(503, "target_credentials_invalid", str(exc)) from exc
 
 
 def _store_target_session(storage_state: dict[str, Any]) -> None:

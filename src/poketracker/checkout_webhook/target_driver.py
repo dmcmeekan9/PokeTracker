@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from poketracker.checkout.target_credentials import TargetCredentials
 from poketracker.checkout.target_storage_state import decode_storage_state_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 
@@ -49,6 +50,7 @@ def purchase_target_item(
     profile: dict[str, Any],
     target_session_json: str | None,
     *,
+    target_credentials: TargetCredentials | None = None,
     verify_only: bool = False,
 ) -> TargetCheckoutResult:
     if not target_session_json:
@@ -73,6 +75,7 @@ def purchase_target_item(
         try:
             _goto_target_page(page, request.url)
             _dismiss_target_overlays(page)
+            _ensure_target_signed_in(page, target_credentials)
             _stop_on_intervention(_page_content(page))
             if not _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
                 if not _page_indicates_cart_has_item(_page_content(page)):
@@ -84,11 +87,13 @@ def purchase_target_item(
             _click_first(page, [r"view cart", r"checkout", r"check\s*out", r"cart"], "cart_or_checkout", optional=True)
             if "cart" not in page.url and "checkout" not in page.url:
                 _goto_target_page(page, "https://www.target.com/cart")
+            _ensure_target_signed_in(page, target_credentials)
             _stop_on_intervention(_page_content(page))
             _select_standard_shipping(page)
             actual_quantity = _set_target_quantity(page, request.quantity)
             _click_first(page, [r"checkout", r"check\s*out", r"sign in to check out"], "checkout", optional=True)
-            _wait_for_checkout_ready(page, profile)
+            _ensure_target_signed_in(page, target_credentials)
+            _wait_for_checkout_ready(page, profile, target_credentials=target_credentials)
             _stop_on_intervention(_page_content(page))
 
             if verify_only:
@@ -135,6 +140,7 @@ def purchase_target_item(
 def refresh_target_session(
     target_session_json: str | None,
     verify_url: str | None = None,
+    target_credentials: TargetCredentials | None = None,
 ) -> TargetSessionRefreshResult:
     if not target_session_json:
         raise CheckoutWebhookError(503, "target_session_missing", "Target session secret is not configured")
@@ -157,10 +163,12 @@ def refresh_target_session(
         try:
             _goto_target_page(page, "https://www.target.com/account")
             _dismiss_target_overlays(page)
+            _ensure_target_signed_in(page, target_credentials)
             _stop_on_intervention(_page_content(page))
             if verify_url:
                 _goto_target_page(page, verify_url)
                 _dismiss_target_overlays(page)
+                _ensure_target_signed_in(page, target_credentials)
                 _stop_on_intervention(_page_content(page))
             refreshed_state = context.storage_state()
             message = "Target session refreshed in AWS"
@@ -175,6 +183,46 @@ def refresh_target_session(
             raise CheckoutWebhookError(504, "target_timeout", f"Target session refresh timed out: {exc}") from exc
         finally:
             context.close()
+            browser.close()
+
+
+def refresh_target_session_from_cdp(
+    cdp_url: str,
+    verify_url: str | None = None,
+    target_credentials: TargetCredentials | None = None,
+) -> TargetSessionRefreshResult:
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise CheckoutWebhookError(503, "driver_dependency_missing", "Playwright is not installed for the checkout webhook") from exc
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.connect_over_cdp(cdp_url)
+        try:
+            context = browser.contexts[0] if browser.contexts else browser.new_context()
+            page = context.pages[0] if context.pages else context.new_page()
+            try:
+                _goto_target_page(page, "https://www.target.com/account")
+                _dismiss_target_overlays(page)
+                _ensure_target_signed_in(page, target_credentials)
+                _stop_on_intervention(_page_content(page))
+                if verify_url:
+                    _goto_target_page(page, verify_url)
+                    _dismiss_target_overlays(page)
+                    _ensure_target_signed_in(page, target_credentials)
+                    _stop_on_intervention(_page_content(page))
+                message = "Target CDP browser session refreshed"
+                if verify_url:
+                    message = "Target CDP browser session refreshed after Target preflight verification"
+                return TargetSessionRefreshResult(
+                    status="refreshed",
+                    message=message,
+                    storage_state=context.storage_state(),
+                )
+            except PlaywrightTimeoutError as exc:
+                raise CheckoutWebhookError(504, "target_timeout", f"Target session refresh timed out: {exc}") from exc
+        finally:
             browser.close()
 
 
@@ -292,6 +340,113 @@ def _dismiss_target_overlays(page: Any) -> None:
                 continue
 
 
+def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | None) -> bool:
+    if target_credentials is None or not _page_requires_sign_in(_page_content(page)):
+        return False
+
+    _dismiss_target_overlays(page)
+    if not _fill_first(
+        page,
+        [
+            'input[name="username"]',
+            'input[id="username"]',
+            'input[type="email"]',
+            'input[autocomplete="username"]',
+            'input[id*="email" i]',
+            'input[name*="email" i]',
+            'input[id*="phone" i]',
+            'input[name*="phone" i]',
+        ],
+        [r"email", r"mobile phone", r"phone number", r"username"],
+        target_credentials.username,
+    ):
+        raise CheckoutWebhookError(409, "sign_in_required", "Target sign-in form did not expose the username field")
+
+    if not _fill_password(page, target_credentials.password):
+        _click_first_without_intervention(page, [r"continue", r"next"], optional=True)
+    if not _fill_password_after_username(page, target_credentials.password):
+        raise CheckoutWebhookError(409, "sign_in_required", "Target sign-in form did not expose the password field")
+
+    if not _click_first_without_intervention(page, [r"sign in", r"log in", r"continue"], optional=False):
+        raise CheckoutWebhookError(409, "sign_in_required", "Target sign-in form did not expose the sign-in button")
+
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        page.wait_for_timeout(1000)
+        html = _page_content(page)
+        if not _page_requires_sign_in(html):
+            return True
+        if _page_requires_human_intervention(html):
+            _stop_on_intervention(html)
+
+    _write_debug_artifacts(page, "target_auto_login")
+    raise CheckoutWebhookError(409, "sign_in_required", "Target auto-login did not complete")
+
+
+def _fill_password_after_username(page: Any, password: str) -> bool:
+    deadline = time.monotonic() + 12
+    while time.monotonic() < deadline:
+        if _fill_password(page, password):
+            return True
+        page.wait_for_timeout(500)
+    return False
+
+
+def _fill_password(page: Any, password: str) -> bool:
+    return _fill_first(
+        page,
+        [
+            'input[name="password"]',
+            'input[id="password"]',
+            'input[type="password"]',
+            'input[autocomplete="current-password"]',
+        ],
+        [r"password"],
+        password,
+    )
+
+
+def _fill_first(page: Any, selectors: list[str], label_patterns: list[str], value: str) -> bool:
+    for selector in selectors:
+        try:
+            page.locator(selector).first.fill(value, timeout=2500)
+            return True
+        except Exception:
+            continue
+    for label in label_patterns:
+        try:
+            page.get_by_label(re.compile(label, re.IGNORECASE)).first.fill(value, timeout=2500)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _click_first_without_intervention(page: Any, labels: list[str], *, optional: bool) -> bool:
+    deadline = time.monotonic() + (OPTIONAL_CLICK_DEADLINE_SECONDS if optional else DEFAULT_CLICK_DEADLINE_SECONDS)
+    while time.monotonic() < deadline:
+        for label in labels:
+            pattern = re.compile(label, re.IGNORECASE)
+            candidates = [
+                page.get_by_role("button", name=pattern),
+                page.get_by_role("link", name=pattern),
+                page.get_by_text(pattern),
+            ]
+            for candidate in candidates:
+                try:
+                    candidate.first.click(timeout=CLICK_TIMEOUT_MS)
+                    page.wait_for_load_state("domcontentloaded", timeout=CLICK_LOAD_STATE_TIMEOUT_MS)
+                    page.wait_for_timeout(500)
+                    return True
+                except Exception:
+                    continue
+        page.wait_for_timeout(500)
+    if optional:
+        return False
+    _write_debug_artifacts(page, "target_auto_login_click")
+    return False
+
+
 def _select_standard_shipping(page: Any) -> None:
     locator = page.locator('input[type="radio"][id$="-shipping"][value="STANDARD"]')
     try:
@@ -361,11 +516,7 @@ def _stop_on_intervention(html: str) -> None:
         ("identity_verification", r"two[- ]factor"),
         ("identity_verification", r"multi[- ]factor"),
         ("identity_verification", r"one[- ]time (?:passcode|password|code)"),
-        ("sign_in_required", r"sign in to your target account"),
-        ("sign_in_required", r"sign in to check out"),
-        ("sign_in_required", r"enter your password"),
-        ("sign_in_required", r"password is required"),
-        ("sign_in_required", r"email or mobile phone"),
+        *[("sign_in_required", pattern) for pattern in _SIGN_IN_PATTERNS],
     ]
     for status, pattern in interventions:
         if re.search(pattern, normalized, re.IGNORECASE):
@@ -398,6 +549,31 @@ def _stop_on_intervention(html: str) -> None:
                 )
 
 
+_SIGN_IN_PATTERNS = [
+    r"sign in to your target account",
+    r"sign in to check out",
+    r"enter your password",
+    r"password is required",
+    r"email or mobile phone",
+]
+
+
+def _page_requires_sign_in(html: str) -> bool:
+    normalized = re.sub(r"\s+", " ", html.lower())
+    return any(re.search(pattern, normalized, re.IGNORECASE) for pattern in _SIGN_IN_PATTERNS)
+
+
+def _page_requires_human_intervention(html: str) -> bool:
+    normalized = re.sub(r"\s+", " ", html.lower())
+    return bool(
+        re.search(
+            r"\bcaptcha\b|verify you(?:'| a)?re (?:a )?human|not a robot|verification code|two[- ]factor|multi[- ]factor|one[- ]time (?:passcode|password|code)",
+            normalized,
+            re.IGNORECASE,
+        )
+    )
+
+
 def _page_indicates_cart_has_item(html: str) -> bool:
     normalized = re.sub(r"\s+", " ", html.lower())
     return bool(re.search(r"\b\d+\s+in cart\b", normalized))
@@ -418,7 +594,12 @@ def _page_content(page: Any) -> str:
     raise CheckoutWebhookError(504, "target_timeout", f"Target checkout could not read page content: {last_exc}")
 
 
-def _wait_for_checkout_ready(page: Any, profile: dict[str, Any]) -> None:
+def _wait_for_checkout_ready(
+    page: Any,
+    profile: dict[str, Any],
+    *,
+    target_credentials: TargetCredentials | None = None,
+) -> None:
     postal_code = ""
     shipping = profile.get("shipping_address") if isinstance(profile, dict) else None
     if isinstance(shipping, dict):
@@ -427,6 +608,9 @@ def _wait_for_checkout_ready(page: Any, profile: dict[str, Any]) -> None:
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
         html = _page_content(page)
+        if target_credentials is not None and _page_requires_sign_in(html):
+            _ensure_target_signed_in(page, target_credentials)
+            html = _page_content(page)
         _stop_on_intervention(html)
         text = _page_text(page)
         normalized = re.sub(r"\s+", " ", text.lower())

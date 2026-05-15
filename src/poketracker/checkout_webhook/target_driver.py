@@ -300,8 +300,10 @@ def _click_first_with_auto_login(
 
 
 def _add_to_cart(page: Any, url: str, target_credentials: TargetCredentials | None) -> None:
-    for attempt in range(2):
+    for attempt in range(3):
         if attempt > 0:
+            # Brief pause before reload to allow CDN cache to propagate fresh stock state
+            page.wait_for_timeout(1500)
             _goto_target_page(page, url)
             _ensure_target_signed_in(page, target_credentials)
             _stop_on_intervention(_page_content(page))
@@ -374,6 +376,7 @@ def _click_candidates(page: Any, labels: list[str], step: str) -> list[Any]:
         candidates.extend(
             [
                 page.locator('button[data-test="shippingButton"]'),
+                page.locator('button[data-test="fulfillmentSection_shippingButton"]'),
                 page.locator('button[id^="addToCartButton"]'),
             ]
         )

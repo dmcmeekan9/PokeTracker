@@ -102,3 +102,9 @@ variable "checkout_webhook_memory_size" {
   type        = number
   default     = 2048
 }
+
+variable "target_warmup_urls" {
+  description = "Comma-separated Target product URLs to pre-navigate in EC2 Chrome before checkout. Set automatically from watchlist.yaml during CI deploy."
+  type        = string
+  default     = ""
+}

@@ -155,18 +155,28 @@ def purchase_target_item_from_cdp(
     with sync_playwright() as playwright:
         browser = playwright.chromium.connect_over_cdp(cdp_url)
         try:
-            # When a session is provided, create an isolated context so multiple
-            # simultaneous checkouts don't share the same browser tab.
-            if target_session_json:
+            prewarmed = _find_prewarmed_tab(browser, request.url)
+            if prewarmed:
+                context, page = prewarmed
+                own_context = True
+                # Reload for fresh stock state; warmer may have run up to 5 min ago.
+                try:
+                    page.goto(request.url, wait_until="commit", timeout=15000)
+                    page.wait_for_timeout(300)
+                except Exception:
+                    pass
+            elif target_session_json:
                 storage_state = decode_storage_state_secret(target_session_json)
                 context = _new_target_context(browser, storage_state)
                 own_context = True
+                page = context.new_page()
+                _goto_target_page(page, request.url)
             else:
                 context = browser.contexts[0] if browser.contexts else browser.new_context()
                 own_context = False
-            page = context.new_page() if own_context else (context.pages[0] if context.pages else context.new_page())
-            try:
+                page = context.pages[0] if context.pages else context.new_page()
                 _goto_target_page(page, request.url)
+            try:
                 _ensure_target_signed_in(page, target_credentials)
                 _stop_on_intervention(_page_content(page))
                 _add_to_cart(page, request.url, target_credentials)
@@ -415,6 +425,20 @@ def _run_prewarmed_burst(
                 time.sleep(args.interval_seconds)
         finally:
             browser.close()
+
+
+def _find_prewarmed_tab(browser: Any, url: str) -> tuple[Any, Any] | None:
+    """Return (context, page) if the tab warmer left a tab already loaded at this URL."""
+    normalized = url.rstrip("/")
+    try:
+        for context in browser.contexts:
+            for page in context.pages:
+                page_url = getattr(page, "url", None)
+                if page_url and page_url.rstrip("/") == normalized:
+                    return context, page
+    except Exception:
+        pass
+    return None
 
 
 def _default_verify_url(config: Any) -> str | None:

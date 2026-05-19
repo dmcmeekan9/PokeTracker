@@ -66,6 +66,11 @@ jobs:
           UV_CACHE_DIR: .uv-cache
         run: uv run poketracker-validate-watchlist --file watchlist.yaml
 
+      - name: Extract Target warmup URLs
+        run: |
+          WARMUP_URLS=$(python3 -c "import yaml; d=yaml.safe_load(open('watchlist.yaml')); print(','.join(i['url'] for i in d.get('items',[]) if i.get('enabled') and i.get('retailer')=='target'))")
+          echo "TF_VAR_target_warmup_urls=$WARMUP_URLS" >> "$GITHUB_ENV"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:

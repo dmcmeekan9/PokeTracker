@@ -6,6 +6,7 @@ locals {
   target_checkout_browser_enabled  = local.checkout_webhook_lambda_enabled && var.target_checkout_browser_enabled
   target_session_refresh_enabled   = local.checkout_webhook_lambda_enabled && var.target_session_refresh_enabled
   target_session_refresh_scheduled = local.target_session_refresh_enabled && var.target_session_refresh_schedule_expression != ""
+  target_tab_warmup_enabled        = local.target_checkout_browser_enabled && var.target_warmup_urls != ""
   checkout_webhook_url = var.checkout_webhook_url != "" ? var.checkout_webhook_url : (
     local.checkout_webhook_lambda_enabled ? aws_lambda_function_url.checkout_webhook[0].function_url : ""
   )
@@ -645,6 +646,63 @@ resource "aws_lambda_function" "target_session_refresh" {
     aws_iam_role_policy_attachment.checkout_webhook_vpc_access,
     aws_vpc_endpoint.secretsmanager,
   ]
+}
+
+resource "aws_lambda_function" "tab_warmer" {
+  count         = local.target_tab_warmup_enabled ? 1 : 0
+  function_name = "${local.name_prefix}-tab-warmer"
+  role          = aws_iam_role.checkout_webhook[0].arn
+  package_type  = "Image"
+  image_uri     = var.checkout_webhook_image_uri
+  timeout       = 120
+  memory_size   = 1024
+
+  image_config {
+    command = ["poketracker.checkout_webhook.tab_warmup.lambda_handler"]
+  }
+
+  environment {
+    variables = {
+      TARGET_CDP_URL            = "http://${aws_instance.target_checkout_browser[0].private_ip}:9222"
+      TARGET_SESSION_SECRET_ARN = data.aws_secretsmanager_secret.target_session.arn
+      TARGET_WARMUP_URLS        = var.target_warmup_urls
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = [aws_subnet.public[0].id]
+    security_group_ids = [aws_security_group.checkout_webhook_lambda[0].id]
+  }
+
+  depends_on = [
+    aws_iam_role_policy.checkout_webhook,
+    aws_iam_role_policy_attachment.checkout_webhook_basic,
+    aws_iam_role_policy_attachment.checkout_webhook_vpc_access,
+    aws_vpc_endpoint.secretsmanager,
+  ]
+}
+
+resource "aws_cloudwatch_event_rule" "tab_warmer" {
+  count               = local.target_tab_warmup_enabled ? 1 : 0
+  name                = "${local.name_prefix}-tab-warmer"
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+}
+
+resource "aws_cloudwatch_event_target" "tab_warmer" {
+  count     = local.target_tab_warmup_enabled ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.tab_warmer[0].name
+  target_id = "tab-warmer"
+  arn       = aws_lambda_function.tab_warmer[0].arn
+}
+
+resource "aws_lambda_permission" "tab_warmer_events" {
+  count         = local.target_tab_warmup_enabled ? 1 : 0
+  statement_id  = "AllowEventBridgeTabWarmer"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.tab_warmer[0].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.tab_warmer[0].arn
 }
 
 resource "aws_lambda_function_url" "checkout_webhook" {

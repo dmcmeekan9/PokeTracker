@@ -20,12 +20,6 @@ variable "alert_recipient_email" {
   type        = string
 }
 
-variable "schedule_expression" {
-  description = "EventBridge schedule expression for the ECS task."
-  type        = string
-  default     = "rate(1 minute)"
-}
-
 variable "image_tag" {
   description = "Container image tag used by the ECS task definition."
   type        = string

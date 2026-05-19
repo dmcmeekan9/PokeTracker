@@ -775,32 +775,10 @@ resource "aws_iam_role_policy" "eventbridge" {
   })
 }
 
-resource "aws_cloudwatch_event_rule" "schedule" {
-  name                = "${local.name_prefix}-schedule"
-  schedule_expression = var.schedule_expression
-  state               = "ENABLED"
-}
-
-resource "aws_cloudwatch_event_target" "task" {
-  rule     = aws_cloudwatch_event_rule.schedule.name
-  arn      = aws_ecs_cluster.main.arn
-  role_arn = aws_iam_role.eventbridge.arn
-
-  ecs_target {
-    task_definition_arn = aws_ecs_task_definition.app.arn
-    launch_type         = "FARGATE"
-
-    network_configuration {
-      assign_public_ip = true
-      subnets          = aws_subnet.public[*].id
-      security_groups  = [aws_security_group.task.id]
-    }
-  }
-}
-
 resource "aws_cloudwatch_event_rule" "target_burst" {
-  # Single nightly burst: 1:55 AM – 4:05 AM CT (130 min at 5-sec polling intervals).
-  # One ECS task fires and loops internally until the window closes.
+  # Target polling is handled exclusively by this burst window.
+  # All Target checks run here at 5-sec intervals for 130 min (1:55–4:05 AM CT).
+  # When adding Walmart or Best Buy, create a separate retailer-specific rule below.
   # CDT (UTC-5, Mar–Nov): 6:55 UTC = 1:55 AM CT
   # CST (UTC-6, Nov–Mar): 6:55 UTC = 12:55 AM CT (1 hr early — still covers restock window)
   name                = "${local.name_prefix}-target-burst"

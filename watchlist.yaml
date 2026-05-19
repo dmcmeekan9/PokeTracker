@@ -31,7 +31,7 @@ items:
     type: ETB
     msrp: 54.99
     max_quantity: 2
-    enabled: true
+    enabled: false
     sku: "94300069"
 
   - id: target-destined-rivals-booster-bundle

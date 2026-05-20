@@ -476,7 +476,10 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
     while time.monotonic() < deadline:
         page.wait_for_timeout(1000)
         html = _page_content(page)
-        if not _page_requires_sign_in(html):
+        # React Modal keeps DOM nodes after close; check visible body text instead
+        # of raw HTML to avoid false-positives from hidden modal form labels.
+        body_text = _page_text(page)
+        if not _page_requires_sign_in(body_text):
             return True
         if _page_requires_human_intervention(html):
             _stop_on_intervention(html)

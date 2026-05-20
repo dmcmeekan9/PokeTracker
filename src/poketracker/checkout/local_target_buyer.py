@@ -29,7 +29,6 @@ from poketracker.checkout_webhook.target_driver import (
     _new_target_context,
     _page_content,
     _page_indicates_cart_has_item,
-    _page_requires_sign_in,
     _resume_checkout_after_sign_in,
     _set_target_quantity,
     _select_standard_shipping,
@@ -157,22 +156,7 @@ def purchase_target_item_from_cdp(
         browser = playwright.chromium.connect_over_cdp(cdp_url)
         try:
             prewarmed = _find_prewarmed_tab(browser, request.url)
-            if prewarmed and target_session_json:
-                # Always build a fresh context from Secrets Manager even when a
-                # pre-warmed tab exists. The tab warmer creates isolated contexts at
-                # warm time and CDP contexts don't support reliable in-place cookie
-                # replacement, so stale cookies can't be patched without a new context.
-                _stale_ctx, _ = prewarmed
-                try:
-                    _stale_ctx.close()
-                except Exception:
-                    pass
-                storage_state = decode_storage_state_secret(target_session_json)
-                context = _new_target_context(browser, storage_state)
-                own_context = True
-                page = context.new_page()
-                _goto_target_page(page, request.url)
-            elif prewarmed:
+            if prewarmed:
                 context, page = prewarmed
                 own_context = True
                 # Reload for fresh stock state; warmer may have run up to 5 min ago.

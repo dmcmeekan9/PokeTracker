@@ -466,11 +466,26 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
 
 
 def _fill_password_after_username(page: Any, password: str) -> bool:
-    deadline = time.monotonic() + 12
+    # Poll with a short per-selector timeout so Target's React UI has ~30s to render
+    # the password step. The full 2500ms-per-selector timeout in _fill_first is too
+    # slow to retry effectively within a tight deadline.
+    selectors = [
+        'input[data-test="password"]',
+        'input[name="password"]',
+        'input[id="password"]',
+        'input[type="password"]',
+        'input[autocomplete="current-password"]',
+    ]
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
-        if _fill_password(page, password):
-            return True
-        page.wait_for_timeout(500)
+        _stop_on_intervention(_page_content(page))
+        for selector in selectors:
+            try:
+                page.locator(selector).first.fill(password, timeout=500)
+                return True
+            except Exception:
+                continue
+        page.wait_for_timeout(300)
     return False
 
 

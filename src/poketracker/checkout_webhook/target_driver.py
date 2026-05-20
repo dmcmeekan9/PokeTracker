@@ -476,10 +476,16 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
     while time.monotonic() < deadline:
         page.wait_for_timeout(1000)
         html = _page_content(page)
-        # React Modal keeps DOM nodes after close; check visible body text instead
-        # of raw HTML to avoid false-positives from hidden modal form labels.
+        # Two-pronged completion check:
+        # 1. Visible body text has no sign-in patterns (handles modal close — hidden
+        #    modal DOM nodes still contain "email or mobile phone" in raw HTML).
+        # 2. Page URL is not a standalone /login page — full-page sign-in success
+        #    navigates away; input placeholders don't appear in inner_text() so
+        #    body_text alone can't detect a still-open login page.
         body_text = _page_text(page)
-        if not _page_requires_sign_in(body_text):
+        page_url = getattr(page, "url", "")
+        signed_in = not _page_requires_sign_in(body_text) and "/login" not in page_url
+        if signed_in:
             return True
         if _page_requires_human_intervention(html):
             _stop_on_intervention(html)

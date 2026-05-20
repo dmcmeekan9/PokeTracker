@@ -50,8 +50,8 @@ aws lambda invoke --function-name poketracker-prod-tab-warmer \
 2. Invoke tab warmer Lambda
 3. Re-run `/check-infra`
 
-### VNC into EC2 Chrome (manual intervention for CAPTCHA/MFA only)
-Use `/vnc` skill. SSM port-forward to 5901, connect VNC client to `127.0.0.1:5901`. Only needed for CAPTCHA or MFA challenges — routine sign-in and session refresh are now fully automated.
+### VNC into EC2 Chrome (last resort — has never been needed in practice)
+Use `/vnc` skill. SSM port-forward to 5901, connect VNC client to `127.0.0.1:5901`. Only relevant if Target ever triggers a CAPTCHA or MFA challenge, which has not occurred. The nightly refresh keeps the session alive; if it ever expires, auto-sign-in handles recovery.
 
 ### Local verify checkout
 ```powershell
@@ -63,8 +63,8 @@ uv run poketracker-verify-target-checkout --url "https://www.target.com/p/spaghe
 - **Always `verify_only: true`** in any test Lambda invocation — prod Lambda has `TARGET_PLACE_ORDER_ENABLED: true`
 - **Never hardcode EC2 instance ID** — always look up by tag `poketracker-prod-target-checkout-browser`
 - **Test item**: SpaghettiOs Pokemon Shapes SKU `95042532`, $1.39, sold by Target (see `scripts/validate-checkout.sh`)
-- Checkout driver **auto-recovers** from Target sign-in using credentials in Secrets Manager (Target changed their auth flow to require "Enter a password" click after username — this is handled)
-- Checkout driver **fails closed** on CAPTCHA/MFA/identity verification — VNC intervention is the fix for those
+- Checkout driver **auto-recovers** from Target sign-in using credentials in Secrets Manager (handles username → "Enter a password" → password flow)
+- Checkout driver fails closed on CAPTCHA/MFA — but this has never occurred in practice; the nightly refresh prevents session expiry
 - `scripts/validate-checkout.sh` clears the test cart automatically in step 3
 
 ## Autonomy

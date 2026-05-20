@@ -468,9 +468,17 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
             return True
         if _page_requires_human_intervention(html):
             _stop_on_intervention(html)
+        # "Verify it's you" is identity verification but isn't caught by
+        # _page_requires_human_intervention — surface it explicitly.
+        if re.search(r"verify it.?s you|we sent a code|check your email|check your phone", html, re.IGNORECASE):
+            raise CheckoutWebhookError(409, "identity_verification", "Target requires identity verification after sign-in")
 
     _write_debug_artifacts(page, "target_auto_login")
-    raise CheckoutWebhookError(409, "sign_in_required", "Target auto-login did not complete")
+    try:
+        _diag = re.sub(r"\s+", " ", _page_content(page))[:600]
+    except Exception:
+        _diag = "unavailable"
+    raise CheckoutWebhookError(409, "sign_in_required", f"Target auto-login did not complete. page_snippet={_diag!r}")
 
 
 def _fill_password_after_username(page: Any, password: str) -> bool:

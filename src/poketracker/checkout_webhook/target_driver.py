@@ -452,12 +452,16 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
         )
     if not _fill_password_after_username(page, target_credentials.password):
         try:
-            _diag = re.sub(r"\s+", " ", _page_text(page))[:800]
+            _url = getattr(page, "url", "unknown")
+            _text = re.sub(r"\s+", " ", _page_text(page))
+            # Pull out dialog/modal text if present
+            _modal = re.search(r'role=["\']dialog["\']', _page_content(page))
+            _diag = f"url={_url} modal={'yes' if _modal else 'no'} text={_text[800:1600]!r}"
         except Exception:
             _diag = "unavailable"
         raise CheckoutWebhookError(
             409, "sign_in_required",
-            f"Target sign-in form did not expose the password field. page_text={_diag!r}"
+            f"Target sign-in form did not expose the password field. {_diag}"
         )
 
     if not _click_first_without_intervention(page, [r"sign in", r"log in", r"continue"], optional=False):

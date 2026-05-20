@@ -160,25 +160,25 @@ def purchase_target_item_from_cdp(
             if prewarmed:
                 context, page = prewarmed
                 own_context = True
+                # Always sync the pre-warmed context's cookies from Secrets Manager
+                # before checkout. The tab warmer creates isolated contexts at warm
+                # time and they don't pick up session refreshes automatically — so the
+                # cookies can be stale even when Secrets Manager has a fresh session.
+                if target_session_json:
+                    try:
+                        fresh_state = decode_storage_state_secret(target_session_json)
+                        fresh_cookies = fresh_state.get("cookies", [])
+                        if fresh_cookies:
+                            context.clear_cookies()
+                            context.add_cookies(fresh_cookies)
+                    except Exception:
+                        pass
                 # Reload for fresh stock state; warmer may have run up to 5 min ago.
                 try:
                     page.goto(request.url, wait_until="commit", timeout=15000)
                     page.wait_for_timeout(300)
                 except Exception:
                     pass
-                # If the pre-warmed tab's session is stale and Secrets Manager has a
-                # fresh session, swap out the stale context rather than fighting Target's
-                # sign-in form. The tab warmer creates isolated contexts that don't
-                # pick up session refreshes automatically.
-                if target_session_json and _page_requires_sign_in(_page_content(page)):
-                    try:
-                        context.close()
-                    except Exception:
-                        pass
-                    storage_state = decode_storage_state_secret(target_session_json)
-                    context = _new_target_context(browser, storage_state)
-                    page = context.new_page()
-                    _goto_target_page(page, request.url)
             elif target_session_json:
                 storage_state = decode_storage_state_secret(target_session_json)
                 context = _new_target_context(browser, storage_state)

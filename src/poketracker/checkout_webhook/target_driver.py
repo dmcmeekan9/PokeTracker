@@ -359,7 +359,11 @@ def _verify_click_candidate_present(page: Any, labels: list[str], step: str) -> 
         _stop_on_intervention(_page_content(page))
         page.wait_for_timeout(200)
     _write_debug_artifacts(page, step)
-    raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control")
+    try:
+        _diag = f"url={getattr(page,'url','?')} text={re.sub(chr(32)+'+', ' ', _page_text(page))[:600]!r}"
+    except Exception:
+        _diag = "unavailable"
+    raise CheckoutWebhookError(409, f"target_{step}_not_found", f"Target checkout could not find the {step} control. {_diag}")
 
 
 def _click_deadline_seconds(step: str, optional: bool) -> int:
@@ -799,12 +803,7 @@ def _wait_for_checkout_ready(
         # Ready when the place-order button is visible
         if re.search(r"place\s+(?:your\s+)?order|submit\s+order", normalized):
             return
-        # Ready when profile postal code is confirmed (address/payment already set)
-        if postal_code and postal_code in text and not re.search(
-            r"select.*payment|add.*payment|update.*payment", normalized
-        ):
-            return
-        # Payment selection needed — try clicking the default saved card
+        # Try to select payment if Target is prompting for it
         if re.search(r"select.*payment|add.*payment|choose.*payment|payment method", normalized):
             _select_saved_payment(page)
         page.wait_for_timeout(400)

@@ -444,8 +444,11 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
             page.wait_for_timeout(400)
         except Exception:
             pass
+        # Only click "continue" or "next" — NOT "sign in" or "log in".
+        # Those fire after the password is filled; clicking them here
+        # (before the password) would submit an empty password form.
         _click_first_without_intervention(
-            page, [r"continue", r"next", r"sign in", r"log in", r"submit"], optional=True
+            page, [r"continue", r"next"], optional=True
         )
     if not _fill_password_after_username(page, target_credentials.password):
         try:

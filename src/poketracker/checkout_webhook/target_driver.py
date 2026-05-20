@@ -719,10 +719,11 @@ def _stop_on_intervention(html: str) -> None:
     if not ready_to_order:
         for pattern in soft_payment_interventions:
             if re.search(pattern, normalized, re.IGNORECASE):
+                snippet = normalized[max(0, normalized.find("payment")-50):normalized.find("payment")+200]
                 raise CheckoutWebhookError(
                     409,
                     "payment_intervention",
-                    "Target checkout requires intervention: payment_intervention",
+                    f"Target checkout requires intervention: payment_intervention. snippet={snippet!r}",
                 )
 
 

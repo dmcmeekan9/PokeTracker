@@ -478,7 +478,9 @@ def _fill_password_after_username(page: Any, password: str) -> bool:
     ]
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
-        _stop_on_intervention(_page_content(page))
+        html = _page_content(page)
+        if _page_requires_human_intervention(html):
+            _stop_on_intervention(html)
         for selector in selectors:
             try:
                 page.locator(selector).first.fill(password, timeout=500)

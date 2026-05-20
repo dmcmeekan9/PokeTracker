@@ -157,22 +157,24 @@ def purchase_target_item_from_cdp(
         browser = playwright.chromium.connect_over_cdp(cdp_url)
         try:
             prewarmed = _find_prewarmed_tab(browser, request.url)
-            if prewarmed:
+            if prewarmed and target_session_json:
+                # Always build a fresh context from Secrets Manager even when a
+                # pre-warmed tab exists. The tab warmer creates isolated contexts at
+                # warm time and CDP contexts don't support reliable in-place cookie
+                # replacement, so stale cookies can't be patched without a new context.
+                _stale_ctx, _ = prewarmed
+                try:
+                    _stale_ctx.close()
+                except Exception:
+                    pass
+                storage_state = decode_storage_state_secret(target_session_json)
+                context = _new_target_context(browser, storage_state)
+                own_context = True
+                page = context.new_page()
+                _goto_target_page(page, request.url)
+            elif prewarmed:
                 context, page = prewarmed
                 own_context = True
-                # Always sync the pre-warmed context's cookies from Secrets Manager
-                # before checkout. The tab warmer creates isolated contexts at warm
-                # time and they don't pick up session refreshes automatically — so the
-                # cookies can be stale even when Secrets Manager has a fresh session.
-                if target_session_json:
-                    try:
-                        fresh_state = decode_storage_state_secret(target_session_json)
-                        fresh_cookies = fresh_state.get("cookies", [])
-                        if fresh_cookies:
-                            context.clear_cookies()
-                            context.add_cookies(fresh_cookies)
-                    except Exception:
-                        pass
                 # Reload for fresh stock state; warmer may have run up to 5 min ago.
                 try:
                     page.goto(request.url, wait_until="commit", timeout=15000)

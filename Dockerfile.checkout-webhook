@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.50.0-jammy
 
 WORKDIR /function
 
@@ -13,7 +13,7 @@ RUN python -m pip install --no-cache-dir \
     "boto3>=1.34.0" \
     "PyYAML>=6.0.1" \
     "requests>=2.32.0" \
-    "playwright==1.48.0"
+    "playwright==1.50.0"
 
 ENTRYPOINT ["python", "-m", "awslambdaric"]
 CMD ["poketracker.checkout_webhook.handler.lambda_handler"]

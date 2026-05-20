@@ -435,17 +435,18 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
         ):
             raise CheckoutWebhookError(409, "sign_in_required", "Target sign-in form did not expose the username field")
 
-        # Advance the username step — try Enter first (works on most SPA forms),
-        # then fall back to clicking the submit/continue button.
+        # Advance the username step: press Enter, then immediately click the
+        # Continue/Sign In button. Do NOT poll for the password field first —
+        # burning 12s on _fill_password before clicking Continue means the
+        # button may disappear before we ever try it.
         try:
             page.keyboard.press("Enter")
             page.wait_for_timeout(400)
         except Exception:
             pass
-        if not _fill_password(page, target_credentials.password):
-            _click_first_without_intervention(
-                page, [r"continue", r"next", r"sign in", r"log in"], optional=True
-            )
+        _click_first_without_intervention(
+            page, [r"continue", r"next", r"sign in", r"log in", r"submit"], optional=True
+        )
     if not _fill_password_after_username(page, target_credentials.password):
         raise CheckoutWebhookError(409, "sign_in_required", "Target sign-in form did not expose the password field")
 
@@ -483,7 +484,7 @@ def _fill_password_after_username(page: Any, password: str) -> bool:
             _stop_on_intervention(html)
         for selector in selectors:
             try:
-                page.locator(selector).first.fill(password, timeout=500)
+                page.locator(selector).first.fill(password, timeout=500, force=True)
                 return True
             except Exception:
                 continue

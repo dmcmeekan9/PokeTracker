@@ -523,7 +523,7 @@ resource "aws_instance" "target_checkout_browser" {
     [Service]
     User=poketracker
     Environment=DISPLAY=:1
-    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --disable-dev-shm-usage --window-size=1365,900 https://www.target.com/account
+    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --disable-dev-shm-usage --window-size=1365,900 --disable-features=ServiceWorker about:blank
     Restart=always
     RestartSec=5
 

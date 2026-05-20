@@ -452,12 +452,12 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
         )
     if not _fill_password_after_username(page, target_credentials.password):
         try:
-            _diag = re.sub(r"\s+", " ", _page_content(page))[:600]
+            _diag = re.sub(r"\s+", " ", _page_text(page))[:800]
         except Exception:
             _diag = "unavailable"
         raise CheckoutWebhookError(
             409, "sign_in_required",
-            f"Target sign-in form did not expose the password field. page_snippet={_diag!r}"
+            f"Target sign-in form did not expose the password field. page_text={_diag!r}"
         )
 
     if not _click_first_without_intervention(page, [r"sign in", r"log in", r"continue"], optional=False):

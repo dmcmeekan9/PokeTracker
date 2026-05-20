@@ -149,6 +149,10 @@ class PageWithVisiblePlaceOrder:
             return MissingControl()
         return self.control
 
+    def locator(self, selector: str) -> VisibleControl:
+        _ = selector
+        return self.control
+
 
 def test_verify_click_candidate_present_does_not_click() -> None:
     page = PageWithVisiblePlaceOrder()

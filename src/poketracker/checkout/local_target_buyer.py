@@ -166,16 +166,15 @@ def purchase_target_item_from_cdp(
                     page.wait_for_timeout(300)
                 except Exception:
                     pass
-            elif target_session_json:
-                storage_state = decode_storage_state_secret(target_session_json)
-                context = _new_target_context(browser, storage_state)
-                own_context = True
-                page = context.new_page()
-                _goto_target_page(page, request.url)
             else:
+                # No pre-warmed tab — use Chrome's existing authenticated context
+                # rather than creating a new one with storage_state. Creating a new
+                # Playwright BrowserContext via CDP can fail on some Chrome/Playwright
+                # version combinations; the existing context is already signed in via
+                # the session refresh Lambda.
                 context = browser.contexts[0] if browser.contexts else browser.new_context()
                 own_context = False
-                page = context.pages[0] if context.pages else context.new_page()
+                page = context.new_page()
                 _goto_target_page(page, request.url)
             try:
                 _ensure_target_signed_in(page, target_credentials)

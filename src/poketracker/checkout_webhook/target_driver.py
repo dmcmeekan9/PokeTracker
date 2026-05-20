@@ -450,6 +450,11 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
         _click_first_without_intervention(
             page, [r"continue", r"next"], optional=True
         )
+        # Target now defaults to magic-link/passkey after the username step.
+        # Explicitly select password auth so the password field appears.
+        _click_first_without_intervention(
+            page, [r"enter.{0,10}password", r"use.{0,10}password", r"sign in with password"], optional=True
+        )
     if not _fill_password_after_username(page, target_credentials.password):
         try:
             _url = getattr(page, "url", "unknown")

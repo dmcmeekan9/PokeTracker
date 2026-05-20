@@ -20,7 +20,7 @@ CLICK_STEP_DEADLINES = {
     "add_to_cart": 12,
     "cart_or_checkout": 2,
     "checkout": 8,
-    "place_order": 10,
+    "place_order": 20,
     "quantity_increment": 5,
 }
 DEFAULT_CLICK_DEADLINE_SECONDS = 10
@@ -378,6 +378,14 @@ def _click_candidates(page: Any, labels: list[str], step: str) -> list[Any]:
                 page.locator('button[data-test="shippingButton"]'),
                 page.locator('button[data-test="fulfillmentSection_shippingButton"]'),
                 page.locator('button[id^="addToCartButton"]'),
+            ]
+        )
+    if step == "place_order":
+        candidates.extend(
+            [
+                page.locator('button[data-test="placeOrderButton"]'),
+                page.locator('button[data-test="place-order"]'),
+                page.locator('[data-test*="placeOrder"] button'),
             ]
         )
     for label in labels:

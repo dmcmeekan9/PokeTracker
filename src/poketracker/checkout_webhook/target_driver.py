@@ -415,6 +415,8 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
         if not _fill_first(
             page,
             [
+                'input[data-test="username"]',
+                'input[data-test="email"]',
                 'main input[name="username"]',
                 'main input[id="username"]',
                 'main input[type="email"]',
@@ -423,6 +425,10 @@ def _ensure_target_signed_in(page: Any, target_credentials: TargetCredentials | 
                 '[role="dialog"] input[id="username"]',
                 '[role="dialog"] input[type="email"]',
                 '[role="dialog"] input[autocomplete="username"]',
+                'input[name="username"]',
+                'input[id="username"]',
+                'input[type="email"]',
+                'input[autocomplete="username"]',
             ],
             [r"email or mobile phone", r"mobile phone", r"phone number", r"username"],
             target_credentials.username,
@@ -463,6 +469,7 @@ def _fill_password(page: Any, password: str) -> bool:
     return _fill_first(
         page,
         [
+            'input[data-test="password"]',
             'input[name="password"]',
             'input[id="password"]',
             'input[type="password"]',

@@ -87,7 +87,7 @@ def purchase_target_item(
             actual_quantity = _set_target_quantity(page, request.quantity)
             _click_first_with_auto_login(
                 page,
-                [r"checkout", r"check\s*out", r"sign in to check out"],
+                [r"check\s*out\s*(all)?", r"sign in to check out"],
                 "checkout",
                 target_credentials,
                 optional=True,
@@ -602,6 +602,34 @@ def _select_standard_shipping(page: Any) -> None:
             continue
 
 
+def _select_saved_payment(page: Any) -> bool:
+    """Try to select the first saved/default payment method on Target's checkout page."""
+    selectors = [
+        '[data-test*="creditCard"] input[type="radio"]',
+        '[data-test*="payment"] input[type="radio"]:not(:checked)',
+        'input[type="radio"][name*="payment"]:not(:checked)',
+        'input[type="radio"][id*="payment"]:not(:checked)',
+        '[data-test*="savedCard"] input[type="radio"]',
+    ]
+    for selector in selectors:
+        try:
+            locator = page.locator(selector).first
+            locator.check(timeout=2000, force=True)
+            page.wait_for_load_state("domcontentloaded", timeout=5000)
+            page.wait_for_timeout(500)
+            return True
+        except Exception:
+            continue
+    # Fallback: click any visible button in the payment section
+    try:
+        page.get_by_role("button", name=re.compile(r"use.*card|select.*card|confirm.*payment", re.IGNORECASE)).first.click(timeout=2000)
+        page.wait_for_timeout(500)
+        return True
+    except Exception:
+        pass
+    return False
+
+
 def _set_target_quantity(page: Any, quantity: int) -> int:
     if quantity == 1:
         return 1
@@ -747,7 +775,7 @@ def _wait_for_checkout_ready(
     if isinstance(shipping, dict):
         postal_code = str(shipping.get("postal_code", "")).strip()
 
-    deadline = time.monotonic() + 45
+    deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         html = _page_content(page)
         if target_credentials is not None and _page_requires_sign_in(html):
@@ -760,10 +788,17 @@ def _wait_for_checkout_ready(
         if on_cart:
             page.wait_for_timeout(400)
             continue
-        if postal_code and postal_code in text:
+        # Ready when the place-order button is visible
+        if re.search(r"place\s+(?:your\s+)?order|submit\s+order", normalized):
             return
-        if re.search(r"place\s+(?:your\s+)?order|submit\s+order|order summary|payment", normalized):
+        # Ready when profile postal code is confirmed (address/payment already set)
+        if postal_code and postal_code in text and not re.search(
+            r"select.*payment|add.*payment|update.*payment", normalized
+        ):
             return
+        # Payment selection needed — try clicking the default saved card
+        if re.search(r"select.*payment|add.*payment|choose.*payment|payment method", normalized):
+            _select_saved_payment(page)
         page.wait_for_timeout(400)
 
 

@@ -30,6 +30,7 @@ from poketracker.checkout_webhook.target_driver import (
     _page_content,
     _page_indicates_cart_has_item,
     _resume_checkout_after_sign_in,
+    _select_saved_payment,
     _set_target_quantity,
     _select_standard_shipping,
     _stop_on_intervention,
@@ -189,7 +190,7 @@ def purchase_target_item_from_cdp(
                 actual_quantity = _set_target_quantity(page, request.quantity)
                 _click_first_with_auto_login(
                     page,
-                    [r"checkout", r"check\s*out", r"sign in to check out"],
+                    [r"check\s*out\s*(all)?", r"sign in to check out"],
                     "checkout",
                     target_credentials,
                     optional=True,

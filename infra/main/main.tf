@@ -537,6 +537,7 @@ resource "aws_instance" "target_checkout_browser" {
     After=network-online.target poketracker-chrome.service
     Wants=network-online.target
     Requires=poketracker-chrome.service
+    PartOf=poketracker-chrome.service
 
     [Service]
     ExecStart=/usr/bin/socat TCP-LISTEN:9222,bind=0.0.0.0,reuseaddr,fork TCP:127.0.0.1:9223

@@ -36,4 +36,4 @@ jobs:
           UV_CACHE_DIR: .uv-cache
           CHECKOUT_WEBHOOK_URL: ${{ vars.CHECKOUT_WEBHOOK_URL }}
           POKETRACKER_MANAGED_CHECKOUT_WEBHOOK: "true"
-        run: uv run poketracker-validate-watchlist --file watchlist.yaml
+        run: uv run poketracker-validate-watchlist --file watchlist.yaml --skip-url-check

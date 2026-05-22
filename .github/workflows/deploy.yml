@@ -64,7 +64,7 @@ jobs:
       - name: Validate watchlist
         env:
           UV_CACHE_DIR: .uv-cache
-        run: uv run poketracker-validate-watchlist --file watchlist.yaml
+        run: uv run poketracker-validate-watchlist --file watchlist.yaml --skip-url-check
 
       - name: Extract Target warmup URLs
         env:

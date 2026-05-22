@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 import os
 import json
 import re
+import socket
+import struct
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -15,25 +18,77 @@ from poketracker.checkout.target_storage_state import decode_storage_state_secre
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 
 def kill_cdp_service_workers(cdp_url: str) -> None:
-    """Close all service_worker CDP targets before Playwright connects.
+    """Close all service_worker CDP targets via WebSocket before Playwright connects.
 
-    Playwright 1.50 asserts when it encounters attached service worker targets
-    during connect_over_cdp, crashing the Node.js driver process. Closing them
-    via the CDP HTTP API before connecting avoids the crash entirely.
+    Playwright asserts in _CRBrowser._onAttachedToTarget when it encounters an
+    attached service_worker whose browserContextId it doesn't recognise (i.e. a
+    context created by a previous Playwright session). The HTTP /json/close
+    endpoint only works for page targets; we must use the browser-level CDP
+    WebSocket to send Target.closeTarget for service workers.
     """
     parsed = urlparse(cdp_url)
-    base = f"{parsed.scheme}://{parsed.netloc}"
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 9222
+
     try:
-        with urllib.request.urlopen(f"{base}/json", timeout=5) as resp:
+        with urllib.request.urlopen(f"http://{host}:{port}/json", timeout=5) as resp:
             targets = json.loads(resp.read())
-        for target in targets:
-            if target.get("type") == "service_worker":
-                try:
-                    urllib.request.urlopen(f"{base}/json/close/{target['id']}", timeout=3)
-                except Exception:
-                    pass
+        sw_ids = [t["id"] for t in targets if t.get("type") == "service_worker"]
+    except Exception:
+        return
+
+    if not sw_ids:
+        return
+
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/json/version", timeout=5) as resp:
+            version = json.loads(resp.read())
+        ws_url = urlparse(version["webSocketDebuggerUrl"])
+        ws_path = ws_url.path
+    except Exception:
+        return
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect((host, port))
+        key = base64.b64encode(os.urandom(16)).decode()
+        sock.sendall(
+            f"GET {ws_path} HTTP/1.1\r\n"
+            f"Host: {host}:{port}\r\n"
+            f"Upgrade: websocket\r\n"
+            f"Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            f"Sec-WebSocket-Version: 13\r\n\r\n".encode()
+        )
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            buf += sock.recv(512)
+        if b" 101 " not in buf[:100]:
+            return
+        for i, target_id in enumerate(sw_ids):
+            _ws_send(sock, json.dumps({"id": i + 1, "method": "Target.closeTarget", "params": {"targetId": target_id}}))
+            try:
+                sock.recv(256)
+            except Exception:
+                pass
+        sock.close()
     except Exception:
         pass
+
+
+def _ws_send(sock: socket.socket, message: str) -> None:
+    data = message.encode()
+    n = len(data)
+    mask = os.urandom(4)
+    header = bytearray([0x81])
+    if n < 126:
+        header.append(0x80 | n)
+    else:
+        header.append(0x80 | 126)
+        header += struct.pack(">H", n)
+    header += mask
+    sock.sendall(bytes(header) + bytes(d ^ mask[i % 4] for i, d in enumerate(data)))
 
 
 TARGET_USER_AGENT = (

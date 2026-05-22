@@ -416,15 +416,17 @@ def _dismiss_target_overlays(page: Any) -> None:
                 for (const label of labels) {
                     const btn = btns.find(
                         b => b.innerText.trim().toLowerCase().includes(label)
-                             && b.getBoundingClientRect().width > 0
                     );
-                    if (btn) { btn.click(); return true; }
+                    if (btn) {
+                        btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
+                        return true;
+                    }
                 }
                 return false;
             }"""
         )
         if dismissed:
-            page.wait_for_timeout(300)
+            page.wait_for_timeout(500)
             return
     except Exception:
         pass

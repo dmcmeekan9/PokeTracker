@@ -405,6 +405,29 @@ def _click_candidates(page: Any, labels: list[str], step: str) -> list[Any]:
 
 
 def _dismiss_target_overlays(page: Any) -> None:
+    # JavaScript-based dismissal is more reliable than Playwright's accessibility-tree
+    # locators when modals trap focus or use non-standard aria attributes (e.g. the
+    # "Health Data Consent" dialog that appears on first visit to a fresh Chrome profile).
+    try:
+        dismissed = page.evaluate(
+            """() => {
+                const labels = ['continue shopping', 'close'];
+                const btns = Array.from(document.querySelectorAll('button'));
+                for (const label of labels) {
+                    const btn = btns.find(
+                        b => b.innerText.trim().toLowerCase().includes(label)
+                             && b.getBoundingClientRect().width > 0
+                    );
+                    if (btn) { btn.click(); return true; }
+                }
+                return false;
+            }"""
+        )
+        if dismissed:
+            page.wait_for_timeout(300)
+            return
+    except Exception:
+        pass
     for label in [r"continue shopping", r"close"]:
         pattern = re.compile(label, re.IGNORECASE)
         for candidate in [page.get_by_role("button", name=pattern), page.get_by_text(pattern)]:

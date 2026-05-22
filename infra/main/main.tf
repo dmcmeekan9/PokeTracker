@@ -460,7 +460,7 @@ resource "aws_instance" "target_checkout_browser" {
     encrypted   = true
   }
 
-  user_data_replace_on_change = true
+  user_data_replace_on_change = false
   user_data                   = <<-EOF
     #!/bin/bash
     set -euxo pipefail

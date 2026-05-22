@@ -4,13 +4,37 @@ import os
 import json
 import re
 import time
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 from typing import Any
 
 from poketracker.checkout.target_credentials import TargetCredentials
 from poketracker.checkout.target_storage_state import decode_storage_state_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
+
+def kill_cdp_service_workers(cdp_url: str) -> None:
+    """Close all service_worker CDP targets before Playwright connects.
+
+    Playwright 1.50 asserts when it encounters attached service worker targets
+    during connect_over_cdp, crashing the Node.js driver process. Closing them
+    via the CDP HTTP API before connecting avoids the crash entirely.
+    """
+    parsed = urlparse(cdp_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    try:
+        with urllib.request.urlopen(f"{base}/json", timeout=5) as resp:
+            targets = json.loads(resp.read())
+        for target in targets:
+            if target.get("type") == "service_worker":
+                try:
+                    urllib.request.urlopen(f"{base}/json/close/{target['id']}", timeout=3)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
 
 TARGET_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

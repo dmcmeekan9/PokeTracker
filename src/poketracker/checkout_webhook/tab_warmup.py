@@ -7,7 +7,7 @@ from typing import Any
 import boto3
 
 from poketracker.checkout.target_storage_state import decode_storage_state_secret
-from poketracker.checkout_webhook.target_driver import _goto_target_page, _new_target_context
+from poketracker.checkout_webhook.target_driver import _goto_target_page, _new_target_context, kill_cdp_service_workers
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -40,6 +40,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     failed: list[str] = []
 
     try:
+        kill_cdp_service_workers(cdp_url)
         with sync_playwright() as playwright:
             try:
                 browser = playwright.chromium.connect_over_cdp(cdp_url, timeout=10000)
@@ -75,6 +76,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                         except Exception as exc:
                             failed.append(f"{url}: warm failed: {exc}")
             finally:
+                # Kill any service workers registered during warming so Playwright
+                # doesn't assert on them when the checkout Lambda connects next.
+                kill_cdp_service_workers(cdp_url)
                 # Disconnect Playwright; tabs remain open in EC2 Chrome.
                 browser.close()
 

@@ -805,8 +805,6 @@ def _stop_on_intervention(html: str) -> None:
 
     hard_payment_interventions = [
         r"enter (?:the )?(?:card )?security code",
-        r"\bcvv\b",
-        r"\bcvc\b",
         r"payment (?:could not|can't|cannot|was not) (?:be )?(?:authorized|processed|verified)",
         r"card (?:declined|was declined|could not be verified)",
     ]
@@ -814,7 +812,10 @@ def _stop_on_intervention(html: str) -> None:
         if re.search(pattern, normalized, re.IGNORECASE):
             raise CheckoutWebhookError(409, "payment_intervention", "Target checkout requires intervention: payment_intervention")
 
+    # CVV/CVC as a display label is normal on the final review page; only block if not yet at place-order
     soft_payment_interventions = [
+        r"\bcvv\b",
+        r"\bcvc\b",
         r"select (?:a )?payment method",
         r"select payment type",
         r"add (?:a )?payment method",

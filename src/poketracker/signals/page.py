@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import re
 import time
 from decimal import Decimal, InvalidOperation
@@ -11,12 +12,26 @@ import requests
 from poketracker.models import SellerClassification, SignalStatus, StockSignal, WatchlistItem
 from poketracker.signals.base import SignalAdapter
 
+_BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+}
+
 
 class RetailerPageSignalAdapter(SignalAdapter):
-    def __init__(self, timeout_seconds: int = 10, max_attempts: int = 2, retry_delay_seconds: float = 1.0) -> None:
+    def __init__(
+        self,
+        timeout_seconds: int = 10,
+        max_attempts: int = 2,
+        retry_delay_seconds: float = 1.0,
+        request_jitter_seconds: float = 1.0,
+    ) -> None:
         self.timeout_seconds = timeout_seconds
         self.max_attempts = max_attempts
         self.retry_delay_seconds = retry_delay_seconds
+        self.request_jitter_seconds = request_jitter_seconds
 
     def check(self, item: WatchlistItem) -> StockSignal:
         response = None
@@ -31,6 +46,14 @@ class RetailerPageSignalAdapter(SignalAdapter):
             )
         except requests.RequestException as exc:
             return StockSignal(item=item, status=SignalStatus.ERROR, source="page", message=str(exc))
+
+        if response.status_code == 429:
+            return StockSignal(
+                item=item,
+                status=SignalStatus.UNKNOWN,
+                source="page",
+                message="HTTP 429 rate-limited",
+            )
 
         if response.status_code != 200:
             return StockSignal(
@@ -63,10 +86,16 @@ class RetailerPageSignalAdapter(SignalAdapter):
         )
 
     def _get(self, url: str) -> requests.Response:
+        if self.request_jitter_seconds > 0:
+            time.sleep(random.uniform(0, self.request_jitter_seconds))
         last_exc: requests.RequestException | None = None
         for attempt in range(1, self.max_attempts + 1):
             try:
-                return requests.get(url, timeout=self.timeout_seconds)
+                response = requests.get(url, headers=_BROWSER_HEADERS, timeout=self.timeout_seconds)
+                if response.status_code == 429 and attempt < self.max_attempts:
+                    time.sleep(self.retry_delay_seconds)
+                    continue
+                return response
             except (requests.Timeout, requests.ConnectionError) as exc:
                 last_exc = exc
                 if attempt < self.max_attempts:

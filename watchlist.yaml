@@ -71,7 +71,7 @@ items:
     type: ETB
     msrp: 59.99
     max_quantity: 1
-    enabled: true
+    enabled: false
     sku: "95267143"
 
   - id: target-chaos-rising-booster-bundle
@@ -81,6 +81,6 @@ items:
     type: BB
     msrp: 29.99
     max_quantity: 2
-    enabled: true
+    enabled: false
     sku: "95298172"
   

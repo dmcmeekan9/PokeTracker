@@ -1,0 +1,14 @@
+FROM public.ecr.aws/lambda/python:3.12
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+RUN pip install --no-cache-dir \
+    "boto3>=1.34.0" \
+    "PyYAML>=6.0.1" \
+    "curl-cffi>=0.7.0" \
+    && pip install --no-cache-dir -e .
+
+CMD ["poketracker.pokecenter_notifier.handler.lambda_handler"]

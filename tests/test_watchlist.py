@@ -71,7 +71,7 @@ def test_rejects_quantity_over_supported_limit() -> None:
 
 def test_rejects_unknown_retailer() -> None:
     raw = base_watchlist()
-    raw["items"][0]["retailer"] = "pokemoncenter"
+    raw["items"][0]["retailer"] = "fakereatailer"
 
     with pytest.raises(WatchlistValidationError):
         parse_watchlist(raw)

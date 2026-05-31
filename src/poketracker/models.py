@@ -11,6 +11,7 @@ class Retailer(str, Enum):
     TARGET = "target"
     WALMART = "walmart"
     BESTBUY = "bestbuy"
+    POKEMONCENTER = "pokemoncenter"
 
 
 class ProductType(str, Enum):

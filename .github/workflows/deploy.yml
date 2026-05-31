@@ -119,6 +119,7 @@ jobs:
         run: |
           echo "repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
           echo "checkout_webhook_repository_url=$(terraform output -raw checkout_webhook_ecr_repository_url)" >> "$GITHUB_OUTPUT"
+          echo "pokecenter_notifier_repository_url=$(terraform output -raw pokecenter_notifier_ecr_repository_url)" >> "$GITHUB_OUTPUT"
 
       - name: Export app table names
         working-directory: infra/main
@@ -144,6 +145,13 @@ jobs:
           docker push "${{ steps.ecr.outputs.checkout_webhook_repository_url }}:${{ github.sha }}"
           docker push "${{ steps.ecr.outputs.checkout_webhook_repository_url }}:latest"
           echo "TF_VAR_checkout_webhook_image_uri=${{ steps.ecr.outputs.checkout_webhook_repository_url }}:${{ github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Build and push pokecenter notifier image
+        run: |
+          docker build -f Dockerfile.pokecenter-notifier -t "${{ steps.ecr.outputs.pokecenter_notifier_repository_url }}:${{ github.sha }}" -t "${{ steps.ecr.outputs.pokecenter_notifier_repository_url }}:latest" .
+          docker push "${{ steps.ecr.outputs.pokecenter_notifier_repository_url }}:${{ github.sha }}"
+          docker push "${{ steps.ecr.outputs.pokecenter_notifier_repository_url }}:latest"
+          echo "TF_VAR_pokecenter_notifier_image_uri=${{ steps.ecr.outputs.pokecenter_notifier_repository_url }}:${{ github.sha }}" >> "$GITHUB_ENV"
 
       - name: Terraform apply image tag
         working-directory: infra/main

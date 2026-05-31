@@ -83,4 +83,31 @@ items:
     max_quantity: 2
     enabled: false
     sku: "95298172"
-  
+
+  - id: pokecenter-ascended-heroes-etb
+    name: "Pokémon Center: Mega Evolution Ascended Heroes ETB"
+    retailer: pokemoncenter
+    url: "https://www.pokemoncenter.com/product/10-10315-108/pokemon-tcg-mega-evolution-ascended-heroes-pokemon-center-elite-trainer-box"
+    type: ETB
+    msrp: 69.99
+    max_quantity: 1
+    enabled: true
+
+  - id: pokecenter-phantasmal-flames-etb
+    name: "Pokémon Center: Mega Evolution Phantasmal Flames ETB"
+    retailer: pokemoncenter
+    url: "https://www.pokemoncenter.com/product/10-10186-109/pokemon-tcg-mega-evolution-phantasmal-flames-pokemon-center-elite-trainer-box"
+    type: ETB
+    msrp: 69.99
+    max_quantity: 1
+    enabled: true
+
+  - id: pokecenter-destined-rivals-etb
+    name: "Pokémon Center: Destined Rivals ETB"
+    retailer: pokemoncenter
+    url: "https://www.pokemoncenter.com/product/100-10653/pokemon-tcg-scarlet-and-violet-destined-rivals-pokemon-center-elite-trainer-box"
+    type: ETB
+    msrp: 64.99
+    max_quantity: 1
+    enabled: true
+

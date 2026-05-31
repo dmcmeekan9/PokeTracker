@@ -6,6 +6,10 @@ output "checkout_webhook_ecr_repository_url" {
   value = aws_ecr_repository.checkout_webhook.repository_url
 }
 
+output "pokecenter_notifier_ecr_repository_url" {
+  value = aws_ecr_repository.pokecenter_notifier.repository_url
+}
+
 output "github_actions_role_arn" {
   value = aws_iam_role.github_actions.arn
 }

@@ -62,6 +62,7 @@ uv run poketracker-verify-target-checkout --url "https://www.target.com/p/spaghe
 ## Safety Rules
 - **Always `verify_only: true`** in any test Lambda invocation — prod Lambda has `TARGET_PLACE_ORDER_ENABLED: true`
 - **Never hardcode EC2 instance ID** — always look up by tag `poketracker-prod-target-checkout-browser`
+- **Never inspect EC2 Chrome via CDP WebSocket scripts** (SSM Python/websocket scripts that connect to Chrome's debug port) — these destabilize the CDP session and cause Lambda `Browser.new_context` / `Target page...closed` failures. Use VNC (`/vnc`) to visually inspect Chrome if needed.
 - **Test item**: SpaghettiOs Pokemon Shapes SKU `95042532`, $1.39, sold by Target (see `scripts/validate-checkout.sh`)
 - Checkout driver **auto-recovers** from Target sign-in using credentials in Secrets Manager (handles username → "Enter a password" → password flow)
 - Checkout driver fails closed on CAPTCHA/MFA — but this has never occurred in practice; the nightly refresh prevents session expiry

@@ -25,6 +25,7 @@ resource "aws_ecr_repository" "pokecenter_notifier" {
 
 resource "aws_ecr_repository_policy" "pokecenter_notifier" {
   repository = aws_ecr_repository.pokecenter_notifier.name
+  depends_on = [aws_iam_role_policy.github_actions]
 
   policy = jsonencode({
     Version = "2008-10-17"

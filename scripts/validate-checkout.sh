@@ -30,7 +30,7 @@ SKIP_CLEANUP="${1:-}"
 ok()   { printf "  ✓ %s\n" "$*"; }
 fail() { printf "\n  ✗ %s\n\n" "$*" >&2; exit 1; }
 step() { printf "\n[%s/3] %s\n" "$1" "$2"; }
-py()   { command -v python3 &>/dev/null && python3 "$@" || uv run python "$@"; }
+py()   { uv run python "$@"; }
 
 T0=$(date +%s)
 echo ""

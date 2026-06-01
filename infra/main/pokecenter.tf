@@ -23,6 +23,31 @@ resource "aws_ecr_repository" "pokecenter_notifier" {
   }
 }
 
+resource "aws_ecr_repository_policy" "pokecenter_notifier" {
+  repository = aws_ecr_repository.pokecenter_notifier.name
+
+  policy = jsonencode({
+    Version = "2008-10-17"
+    Statement = [{
+      Sid    = "LambdaECRImageRetrievalPolicy"
+      Effect = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action = [
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:SetRepositoryPolicy",
+        "ecr:DeleteRepositoryPolicy",
+        "ecr:GetRepositoryPolicy"
+      ]
+      Condition = {
+        StringLike = {
+          "aws:sourceArn" = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:*"
+        }
+      }
+    }]
+  })
+}
+
 resource "aws_iam_role" "pokecenter_notifier" {
   count = local.pokecenter_notifier_enabled ? 1 : 0
   name  = "${local.name_prefix}-pokecenter-notifier"

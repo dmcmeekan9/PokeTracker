@@ -62,6 +62,9 @@ resource "aws_iam_role_policy" "github_actions" {
           "ecr:ListTagsForResource",
           "ecr:ListImages",
           "ecr:PutImage",
+          "ecr:DeleteRepositoryPolicy",
+          "ecr:GetRepositoryPolicy",
+          "ecr:SetRepositoryPolicy",
           "ecr:TagResource",
           "ecr:UntagResource",
           "ecr:UploadLayerPart"

@@ -17,11 +17,14 @@ class Retailer(str, Enum):
 class ProductType(str, Enum):
     ETB = "ETB"
     BOOSTER_BUNDLE = "Booster Bundle"
+    POSTER_COLLECTION = "Poster Collection"
 
 
 PRODUCT_TYPE_ALIASES = {
     "BB": ProductType.BOOSTER_BUNDLE,
     "BOOSTER_BUNDLE": ProductType.BOOSTER_BUNDLE,
+    "PC": ProductType.POSTER_COLLECTION,
+    "POSTER_COLLECTION": ProductType.POSTER_COLLECTION,
 }
 
 

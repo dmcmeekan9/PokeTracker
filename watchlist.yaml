@@ -24,6 +24,16 @@ items:
     enabled: true
     sku: "95120834"
 
+  - id: target-ascended-heroes-poster-collection
+    name: "Target: Ascended Heroes Poster Collection"
+    retailer: target
+    url: "https://www.target.com/p/pok-233-mon-trading-card-game-mega-evolution-ascended-heroes-premium-poster-collection-mega-lucario/-/A-95093981"
+    type: PC
+    msrp: 54.99
+    max_quantity: 2
+    enabled: true
+    sku: "95093981"
+
   - id: target-destined-rivals-etb
     name: "Target: Destined Rivals Elite Trainer Box"
     retailer: target

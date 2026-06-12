@@ -34,6 +34,46 @@ items:
     enabled: true
     sku: "95093981"
 
+  - id: target-temporal-forces-etb
+    name: "Target: Temporal Forces Elite Trainer Box"
+    retailer: target
+    url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-temporal-forces-elite-trainer-box-walking-wake/-/A-91255505"
+    type: ETB
+    msrp: 49.99
+    max_quantity: 2
+    enabled: true
+    sku: "91255505"
+
+  - id: target-temporal-forces-iron-leaves-etb
+    name: "Target: Temporal Forces Iron Leaves Elite Trainer Box"
+    retailer: target
+    url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-temporal-forces-elite-trainer-box-iron-leaves/-/A-91255507"
+    type: ETB
+    msrp: 49.99
+    max_quantity: 2
+    enabled: true
+    sku: "91255507"
+
+  - id: target-paldean-fates-etb
+    name: "Target: Paldean Fates Elite Trainer Box"
+    retailer: target
+    url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-paldean-fates-elite-trainer-box/-/A-89432659"
+    type: ETB
+    msrp: 54.99
+    max_quantity: 2
+    enabled: true
+    sku: "89432659"
+
+  - id: target-paldean-fates-bb
+    name: "Target: Paldean Fates Booster Bundle"
+    retailer: target
+    url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-paldean-fates-booster-bundle/-/A-89432660"
+    type: BB
+    msrp: 27.99
+    max_quantity: 2
+    enabled: true
+    sku: "89432660"
+
   - id: target-destined-rivals-etb
     name: "Target: Destined Rivals Elite Trainer Box"
     retailer: target

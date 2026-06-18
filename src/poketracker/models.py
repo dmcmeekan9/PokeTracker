@@ -18,6 +18,7 @@ class ProductType(str, Enum):
     ETB = "ETB"
     BOOSTER_BUNDLE = "Booster Bundle"
     POSTER_COLLECTION = "Poster Collection"
+    SPC = "SPC"
 
 
 PRODUCT_TYPE_ALIASES = {
@@ -25,6 +26,7 @@ PRODUCT_TYPE_ALIASES = {
     "BOOSTER_BUNDLE": ProductType.BOOSTER_BUNDLE,
     "PC": ProductType.POSTER_COLLECTION,
     "POSTER_COLLECTION": ProductType.POSTER_COLLECTION,
+    "SPC": ProductType.SPC,
 }
 
 

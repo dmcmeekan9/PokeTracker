@@ -114,6 +114,16 @@ items:
     enabled: true
     sku: "93954446"
 
+  - id: target-prismatic-evolutions-spc
+    name: "Target: Prismatic Evolutions SPC"
+    retailer: target
+    url: "https://www.target.com/p/pok-233-mon-trading-card-game-scarlet-38-violet-8212-prismatic-evolutions-super-premium-collection/-/A-94300072"
+    type: SPC
+    msrp: 99.99
+    max_quantity: 2
+    enabled: true
+    sku: "94300072"
+
   - id: target-chaos-rising-etb
     name: "Target: Chaos Rising Elite Trainer Box"
     retailer: target

@@ -19,7 +19,7 @@ items:
     retailer: target
     url: "https://www.target.com/p/pok--233-mon-trading-card-game--mega-evolution-ascended-heroes-booster-bundle/-/A-95120834"
     type: BB
-    msrp: 29.99
+    msrp: 31.99
     max_quantity: 2
     enabled: true
     sku: "95120834"
@@ -124,32 +124,12 @@ items:
     enabled: false
     sku: "94300072"
 
-  - id: target-chaos-rising-etb
-    name: "Target: Chaos Rising Elite Trainer Box"
-    retailer: target
-    url: "https://www.target.com/p/pok-233-mon-trading-card-game-mega-evolution-chaos-rising-elite-trainer-box/-/A-95267143"
-    type: ETB
-    msrp: 59.99
-    max_quantity: 1
-    enabled: false
-    sku: "95267143"
-
-  - id: target-chaos-rising-booster-bundle
-    name: "Target: Chaos Rising Booster Bundle"
-    retailer: target
-    url: "https://www.target.com/p/pok--233-mon-trading-card-game--mega-evolution-chaos-rising-booster-bundle/-/A-95298172"
-    type: BB
-    msrp: 29.99
-    max_quantity: 2
-    enabled: false
-    sku: "95298172"
-
   - id: pokecenter-ascended-heroes-etb
     name: "Pokémon Center: Mega Evolution Ascended Heroes ETB"
     retailer: pokemoncenter
     url: "https://www.pokemoncenter.com/product/10-10315-108/pokemon-tcg-mega-evolution-ascended-heroes-pokemon-center-elite-trainer-box"
     type: ETB
-    msrp: 69.99
+    msrp: 59.99
     max_quantity: 1
     enabled: true
 
@@ -158,7 +138,7 @@ items:
     retailer: pokemoncenter
     url: "https://www.pokemoncenter.com/product/10-10186-109/pokemon-tcg-mega-evolution-phantasmal-flames-pokemon-center-elite-trainer-box"
     type: ETB
-    msrp: 69.99
+    msrp: 59.99
     max_quantity: 1
     enabled: true
 
@@ -167,7 +147,7 @@ items:
     retailer: pokemoncenter
     url: "https://www.pokemoncenter.com/product/100-10653/pokemon-tcg-scarlet-and-violet-destined-rivals-pokemon-center-elite-trainer-box"
     type: ETB
-    msrp: 64.99
+    msrp: 59.99
     max_quantity: 1
     enabled: true
 

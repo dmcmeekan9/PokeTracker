@@ -378,6 +378,35 @@ def _click_first_with_auto_login(
         return True
 
 
+def _add_to_cart_via_js(page: Any) -> bool:
+    try:
+        clicked = page.evaluate(
+            """() => {
+                const needles = ['add to cart', 'add for shipping', 'ship it'];
+                const btns = Array.from(document.querySelectorAll('button'));
+                for (const needle of needles) {
+                    const btn = btns.find(
+                        b => !b.disabled && b.innerText.trim().toLowerCase().includes(needle)
+                    );
+                    if (btn) {
+                        btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
+                        return true;
+                    }
+                }
+                return false;
+            }"""
+        )
+        if clicked:
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=3000)
+            except Exception:
+                pass
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _add_to_cart(page: Any, url: str, target_credentials: TargetCredentials | None) -> None:
     for attempt in range(3):
         if attempt > 0:
@@ -386,10 +415,17 @@ def _add_to_cart(page: Any, url: str, target_credentials: TargetCredentials | No
             _goto_target_page(page, url)
             _ensure_target_signed_in(page, target_credentials)
             _stop_on_intervention(_page_content(page))
+        if _add_to_cart_via_js(page):
+            return
         if _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
             return
         if _page_indicates_cart_has_item(_page_content(page)):
             return
+        try:
+            body_text = page.locator("body").inner_text(timeout=2000)
+            print(f"[add_to_cart] attempt={attempt} url={page.url!r} body={body_text[:800]!r}")
+        except Exception as dbg_exc:
+            print(f"[add_to_cart] attempt={attempt} debug_failed={dbg_exc}")
     raise CheckoutWebhookError(409, "target_add_to_cart_not_found", "Target checkout could not find the add_to_cart control")
 
 

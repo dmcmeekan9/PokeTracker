@@ -523,8 +523,8 @@ resource "aws_instance" "target_checkout_browser" {
     [Service]
     User=poketracker
     Environment=DISPLAY=:1
-    ExecStartPre=/bin/rm -rf /opt/poketracker/chrome-profile/Default/Service Worker
-    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --disable-dev-shm-usage --disable-features=ServiceWorker --window-size=1365,900 about:blank
+    ExecStartPre=/bin/sh -c 'rm -rf "/opt/poketracker/chrome-profile/Default/Service Worker" "/opt/poketracker/chrome-profile/Default/Last Session" "/opt/poketracker/chrome-profile/Default/Last Tabs"'
+    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --no-restore-last-session --disable-dev-shm-usage --disable-features=ServiceWorker --window-size=1365,900 about:blank
     Restart=always
     RestartSec=5
 

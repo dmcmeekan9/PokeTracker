@@ -121,7 +121,7 @@ items:
     type: SPC
     msrp: 99.99
     max_quantity: 2
-    enabled: true
+    enabled: false
     sku: "94300072"
 
   - id: target-chaos-rising-etb

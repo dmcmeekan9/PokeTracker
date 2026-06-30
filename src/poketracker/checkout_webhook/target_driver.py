@@ -295,6 +295,17 @@ def refresh_target_session_from_cdp(
                 message = "Target CDP browser session refreshed"
                 if verify_url:
                     message = "Target CDP browser session refreshed after Target preflight verification"
+                # Unregister any service workers so the checkout Lambda's connect_over_cdp
+                # doesn't crash on pre-existing SW targets (Playwright CDP assertion in
+                # _CRBrowser._onAttachedToTarget when a SW is already attached).
+                try:
+                    page.evaluate(
+                        "async () => { const r = await navigator.serviceWorker.getRegistrations();"
+                        " await Promise.all(r.map(x => x.unregister())); }"
+                    )
+                    page.wait_for_timeout(300)
+                except Exception:
+                    pass
                 return TargetSessionRefreshResult(
                     status="refreshed",
                     message=message,

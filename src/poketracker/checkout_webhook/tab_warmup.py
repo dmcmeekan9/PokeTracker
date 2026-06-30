@@ -76,8 +76,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                         except Exception as exc:
                             failed.append(f"{url}: warm failed: {exc}")
             finally:
-                # Kill any service workers registered during warming so Playwright
-                # doesn't assert on them when the checkout Lambda connects next.
+                # Unregister service workers via JS before disconnecting so the
+                # checkout Lambda's connect_over_cdp doesn't crash on pre-existing
+                # SW targets (Playwright CDP assertion in _onAttachedToTarget).
+                for ctx in browser.contexts:
+                    for pg in ctx.pages:
+                        try:
+                            pg.evaluate(
+                                "async () => { const r = await navigator.serviceWorker.getRegistrations();"
+                                " await Promise.all(r.map(x => x.unregister())); }"
+                            )
+                        except Exception:
+                            pass
                 kill_cdp_service_workers(cdp_url)
                 # Disconnect Playwright; tabs remain open in EC2 Chrome.
                 browser.close()

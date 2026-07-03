@@ -63,6 +63,8 @@ def test_target_in_stock_uses_msrp_when_price_is_deferred(monkeypatch) -> None:
     assert signal.status == SignalStatus.IN_STOCK
     assert signal.observed_price == Decimal("59.99")
     assert signal.seller == SellerClassification.RETAILER
+    assert "html=in_stock" in (signal.message or "")
+    assert "redsky=unknown" in (signal.message or "")
 
 
 def test_target_redsky_fulfillment_overrides_disabled_server_button(monkeypatch) -> None:
@@ -110,6 +112,45 @@ def test_target_redsky_fulfillment_overrides_disabled_server_button(monkeypatch)
     assert signal.observed_price == Decimal("59.99")
     assert calls[1]["headers"]["x-api-key"] == "test-key"
     assert calls[1]["params"]["tcin"] == "95045259"
+
+
+def test_target_html_in_stock_wins_over_lagging_redsky_out_of_stock(monkeypatch) -> None:
+    # HTML button is enabled (server says in stock) but Redsky API lags and returns OUT_OF_STOCK.
+    # We trust the HTML — Redsky should never downgrade a confirmed HTML in-stock signal.
+    html = (
+        '<script>window.__CONFIG__ = JSON.parse("{\\"services\\":{\\"redsky\\":'
+        '{\\"baseUrl\\":\\"https://redsky.target.com\\",\\"apiKey\\":\\"test-key\\"}}}")</script>'
+        '<button type="button">Add to cart</button>'
+    )
+
+    class PageResponse:
+        status_code = 200
+        text = html
+
+    class FulfillmentResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {
+                "data": {
+                    "product": {
+                        "fulfillment": {
+                            "sold_out": False,
+                            "shipping_options": {"availability_status": "OUT_OF_STOCK"},
+                        }
+                    }
+                }
+            }
+
+    monkeypatch.setattr(
+        "requests.get",
+        lambda url, **kwargs: FulfillmentResponse() if "redsky_aggregations" in url else PageResponse(),
+    )
+
+    signal = RetailerPageSignalAdapter().check(item(sku="95045259"))
+
+    assert signal.status == SignalStatus.IN_STOCK
+    assert signal.observed_price == Decimal("59.99")
 
 
 def test_target_redsky_out_of_stock_keeps_item_out_of_stock(monkeypatch) -> None:

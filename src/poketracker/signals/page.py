@@ -17,6 +17,8 @@ _BROWSER_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
 }
 
 
@@ -63,17 +65,26 @@ class RetailerPageSignalAdapter(SignalAdapter):
                 message=f"HTTP {response.status_code}",
             )
 
-        status = _extract_status(response.text)
+        html_status = _extract_status(response.text)
+        status = html_status
         body = response.text.lower()
 
         seller, seller_name = _classify_seller(item, body)
         observed_price = _extract_price(response.text)
+        redsky_status = SignalStatus.UNKNOWN
         if item.retailer.value == "target" and item.sku:
-            target_status = self._target_fulfillment_status(item, response.text)
-            if target_status != SignalStatus.UNKNOWN:
-                status = target_status
+            redsky_status = self._target_fulfillment_status(item, response.text)
+            if redsky_status == SignalStatus.IN_STOCK:
+                status = SignalStatus.IN_STOCK
+            elif redsky_status == SignalStatus.OUT_OF_STOCK and html_status != SignalStatus.IN_STOCK:
+                status = SignalStatus.OUT_OF_STOCK
         if observed_price is None and item.retailer.value == "target" and status == SignalStatus.IN_STOCK:
             observed_price = item.msrp
+
+        if item.retailer.value == "target" and item.sku:
+            message = f"html={html_status.value} redsky={redsky_status.value}"
+        else:
+            message = f"html={html_status.value}"
 
         return StockSignal(
             item=item,
@@ -82,7 +93,7 @@ class RetailerPageSignalAdapter(SignalAdapter):
             seller=seller,
             seller_name=seller_name,
             source="page",
-            message="page check completed",
+            message=message,
         )
 
     def _get(self, url: str) -> requests.Response:
@@ -134,6 +145,8 @@ class RetailerPageSignalAdapter(SignalAdapter):
                     "Accept": "application/json",
                     "User-Agent": "Mozilla/5.0",
                     "x-api-key": api_key,
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
                 },
                 timeout=self.timeout_seconds,
             )

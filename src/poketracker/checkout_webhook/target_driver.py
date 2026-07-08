@@ -80,7 +80,7 @@ def resolve_cdp_browser_url(cdp_url: str) -> str:
             return cdp_url
         ws_url = urlparse(ws_raw)
         if ws_url.hostname not in {"127.0.0.1", "localhost", "::1"}:
-            return ws_raw
+            return cdp_url
         netloc = f"{host}:{port}"
         return urlunparse((ws_url.scheme, netloc, ws_url.path, ws_url.params, ws_url.query, ws_url.fragment))
     except Exception:

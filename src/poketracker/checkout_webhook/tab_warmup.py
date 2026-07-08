@@ -11,6 +11,7 @@ from poketracker.checkout_webhook.target_driver import (
     _goto_target_page,
     _new_target_context,
     kill_cdp_service_workers,
+    probe_cdp_endpoint,
     resolve_cdp_browser_url,
 )
 
@@ -43,6 +44,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     warmed: list[str] = []
     failed: list[str] = []
+    cdp_probe = probe_cdp_endpoint(cdp_url)
 
     try:
         kill_cdp_service_workers(cdp_url)
@@ -50,7 +52,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             try:
                 browser = playwright.chromium.connect_over_cdp(resolve_cdp_browser_url(cdp_url), timeout=10000)
             except Exception as exc:
-                return _response(200, {"status": "skipped", "message": f"CDP unavailable (EC2 likely stopped): {exc}"})
+                return _response(
+                    200,
+                    {
+                        "status": "skipped",
+                        "message": f"CDP unavailable (EC2 likely stopped): {exc}",
+                        "cdp_probe": cdp_probe,
+                    },
+                )
 
             try:
                 # Index existing pre-warmed pages by normalized URL.
@@ -100,7 +109,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:
         return _response(500, {"status": "error", "message": str(exc)})
 
-    return _response(200, {"status": "done", "warmed": len(warmed), "failed": failed})
+    return _response(200, {"status": "done", "warmed": len(warmed), "failed": failed, "cdp_probe": cdp_probe})
 
 
 def _load_secret(secret_arn: str | None) -> str | None:

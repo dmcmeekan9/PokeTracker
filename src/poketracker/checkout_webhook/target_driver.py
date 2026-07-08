@@ -18,6 +18,46 @@ from poketracker.checkout.target_storage_state import decode_storage_state_secre
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
 
 
+def probe_cdp_endpoint(cdp_url: str, *, timeout: float = 3.0) -> dict[str, Any]:
+    """Return basic TCP/HTTP diagnostics for a CDP endpoint."""
+    parsed = urlparse(cdp_url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 9222
+    scheme = parsed.scheme or "http"
+    result: dict[str, Any] = {
+        "url": cdp_url,
+        "host": host,
+        "port": port,
+        "tcp": "unknown",
+        "http": "unknown",
+    }
+
+    try:
+        started = time.monotonic()
+        with socket.create_connection((host, port), timeout=timeout):
+            result["tcp"] = "ok"
+            result["tcp_ms"] = int((time.monotonic() - started) * 1000)
+    except Exception as exc:
+        result["tcp"] = "failed"
+        result["tcp_error"] = f"{type(exc).__name__}: {exc}"
+        return result
+
+    try:
+        started = time.monotonic()
+        with urllib.request.urlopen(f"{scheme}://{host}:{port}/json/version", timeout=timeout) as resp:
+            body = resp.read()
+        version = json.loads(body)
+        result["http"] = "ok"
+        result["http_ms"] = int((time.monotonic() - started) * 1000)
+        result["browser"] = version.get("Browser")
+        result["websocket"] = version.get("webSocketDebuggerUrl")
+    except Exception as exc:
+        result["http"] = "failed"
+        result["http_error"] = f"{type(exc).__name__}: {exc}"
+
+    return result
+
+
 def resolve_cdp_browser_url(cdp_url: str) -> str:
     """Return a CDP websocket URL reachable from the caller.
 

@@ -17,6 +17,7 @@ from poketracker.checkout_webhook.target_driver import (
     _stop_on_intervention,
     _verify_click_candidate_present,
     purchase_target_item,
+    probe_cdp_endpoint,
     resolve_cdp_browser_url,
 )
 
@@ -49,6 +50,21 @@ def test_resolve_cdp_browser_url_rewrites_loopback_websocket(monkeypatch) -> Non
         resolve_cdp_browser_url("http://10.42.0.108:9222")
         == "ws://10.42.0.108:9222/devtools/browser/abc"
     )
+
+
+def test_probe_cdp_endpoint_reports_tcp_failure(monkeypatch) -> None:
+    def fail_connect(*_args, **_kwargs):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver.socket.create_connection", fail_connect)
+
+    result = probe_cdp_endpoint("http://10.42.0.193:9222")
+
+    assert result["host"] == "10.42.0.193"
+    assert result["port"] == 9222
+    assert result["tcp"] == "failed"
+    assert "TimeoutError" in result["tcp_error"]
+    assert result["http"] == "unknown"
 
 
 def test_resolve_cdp_browser_url_preserves_remote_websocket(monkeypatch) -> None:

@@ -740,7 +740,7 @@ resource "aws_cloudwatch_event_rule" "tab_warmer" {
   count               = local.target_tab_warmup_enabled ? 1 : 0
   name                = "${local.name_prefix}-tab-warmer"
   schedule_expression = "rate(5 minutes)"
-  state               = "ENABLED"
+  state               = "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "tab_warmer" {

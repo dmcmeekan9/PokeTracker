@@ -467,7 +467,7 @@ resource "aws_instance" "target_checkout_browser" {
     export DEBIAN_FRONTEND=noninteractive
 
     apt-get update
-    apt-get install -y ca-certificates curl gnupg openbox xvfb x11vnc
+    apt-get install -y ca-certificates curl gnupg nginx openbox xvfb x11vnc
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
     chmod a+r /etc/apt/keyrings/google-chrome.gpg
@@ -518,13 +518,13 @@ resource "aws_instance" "target_checkout_browser" {
     Description=PokeTracker persistent Target checkout Chrome
     After=poketracker-display.service network-online.target
     Requires=poketracker-display.service
-    Wants=network-online.target
+    Wants=network-online.target poketracker-cdp-proxy.service
 
     [Service]
     User=poketracker
     Environment=DISPLAY=:1
     ExecStartPre=/bin/sh -c 'rm -rf "/opt/poketracker/chrome-profile/Default/Service Worker" "/opt/poketracker/chrome-profile/Default/Last Session" "/opt/poketracker/chrome-profile/Default/Last Tabs"'
-    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --no-restore-last-session --disable-dev-shm-usage --disable-features=ServiceWorker --window-size=1365,900 about:blank
+    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --no-restore-last-session --disable-dev-shm-usage --disable-features=ServiceWorker --window-size=1365,900 about:blank
     Restart=always
     RestartSec=5
 
@@ -532,8 +532,40 @@ resource "aws_instance" "target_checkout_browser" {
     WantedBy=multi-user.target
     UNIT
 
-    systemctl disable --now poketracker-cdp-proxy 2>/dev/null || true
-    rm -f /etc/systemd/system/poketracker-cdp-proxy.service
+    cat >/etc/nginx/sites-available/poketracker-cdp <<'NGINX'
+    server {
+      listen 9222;
+
+      location / {
+        proxy_pass http://127.0.0.1:9223;
+        proxy_http_version 1.1;
+        proxy_set_header Host 127.0.0.1:9223;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+      }
+    }
+    NGINX
+    rm -f /etc/nginx/sites-enabled/default
+    ln -sf /etc/nginx/sites-available/poketracker-cdp /etc/nginx/sites-enabled/poketracker-cdp
+
+    cat >/etc/systemd/system/poketracker-cdp-proxy.service <<'UNIT'
+    [Unit]
+    Description=PokeTracker CDP reverse proxy for Lambda access
+    After=network-online.target poketracker-chrome.service nginx.service
+    Wants=network-online.target
+    Requires=poketracker-chrome.service nginx.service
+    PartOf=poketracker-chrome.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    ExecStart=/bin/systemctl reload nginx
+    ExecStop=/bin/true
+
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
 
     cat >/etc/systemd/system/poketracker-vnc.service <<'UNIT'
     [Unit]
@@ -553,7 +585,7 @@ resource "aws_instance" "target_checkout_browser" {
     UNIT
 
     systemctl daemon-reload
-    systemctl enable --now poketracker-display poketracker-openbox poketracker-chrome poketracker-vnc
+    systemctl enable --now nginx poketracker-display poketracker-openbox poketracker-chrome poketracker-cdp-proxy poketracker-vnc
   EOF
 
   tags = {

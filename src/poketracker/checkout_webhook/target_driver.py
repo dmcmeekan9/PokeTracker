@@ -127,19 +127,121 @@ def kill_cdp_service_workers(cdp_url: str) -> None:
         if b" 101 " not in buf[:100]:
             return
 
-        _ws_send(sock, json.dumps({"id": 1, "method": "Target.getTargets"}))
-        response = json.loads(_ws_recv_text(sock))
-        infos = response.get("result", {}).get("targetInfos", [])
-        sw_ids = [t["targetId"] for t in infos if t.get("type") == "service_worker" and t.get("targetId")]
-        for i, target_id in enumerate(sw_ids, start=2):
-            _ws_send(sock, json.dumps({"id": i, "method": "Target.closeTarget", "params": {"targetId": target_id}}))
+        next_id = 1
+        attached_workers: dict[str, str] = {}
+
+        _ws_call(sock, next_id, "Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": False, "flatten": True})
+        next_id += 1
+
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline:
             try:
-                _ws_recv_text(sock)
+                message = json.loads(_ws_recv_text(sock))
+            except Exception:
+                break
+            if message.get("method") != "Target.attachedToTarget":
+                continue
+            params = message.get("params", {})
+            info = params.get("targetInfo", {})
+            session_id = params.get("sessionId")
+            target_id = info.get("targetId")
+            if info.get("type") == "service_worker" and isinstance(session_id, str) and isinstance(target_id, str):
+                attached_workers[target_id] = session_id
+
+        for target_id, session_id in attached_workers.items():
+            try:
+                _ws_call(
+                    sock,
+                    next_id,
+                    "Runtime.evaluate",
+                    {"expression": "self.registration && self.registration.unregister && self.registration.unregister()"},
+                    session_id=session_id,
+                    timeout=1.0,
+                )
             except Exception:
                 pass
+            next_id += 1
+            try:
+                _ws_call(sock, next_id, "Target.detachFromTarget", {"sessionId": session_id}, timeout=1.0)
+            except Exception:
+                pass
+            next_id += 1
+            try:
+                _ws_call(sock, next_id, "Target.closeTarget", {"targetId": target_id}, timeout=1.0)
+            except Exception:
+                pass
+            next_id += 1
+
+        response = _ws_call(sock, next_id, "Target.getTargets")
+        next_id += 1
+        infos = response.get("result", {}).get("targetInfos", [])
+        sw_ids = [t["targetId"] for t in infos if t.get("type") == "service_worker" and t.get("targetId")]
+        for target_id in sw_ids:
+            if target_id in attached_workers:
+                continue
+            try:
+                attached = _ws_call(
+                    sock,
+                    next_id,
+                    "Target.attachToTarget",
+                    {"targetId": target_id, "flatten": True},
+                    timeout=1.0,
+                )
+                session_id = attached.get("result", {}).get("sessionId")
+            except Exception:
+                session_id = None
+            next_id += 1
+            if not isinstance(session_id, str):
+                continue
+            try:
+                _ws_call(
+                    sock,
+                    next_id,
+                    "Runtime.evaluate",
+                    {"expression": "self.registration && self.registration.unregister && self.registration.unregister()"},
+                    session_id=session_id,
+                    timeout=1.0,
+                )
+            except Exception:
+                pass
+            next_id += 1
+            try:
+                _ws_call(sock, next_id, "Target.detachFromTarget", {"sessionId": session_id}, timeout=1.0)
+            except Exception:
+                pass
+            next_id += 1
+
+        for target_id in sw_ids:
+            try:
+                _ws_call(sock, next_id, "Target.closeTarget", {"targetId": target_id}, timeout=1.0)
+            except Exception:
+                pass
+            next_id += 1
         sock.close()
     except Exception:
         pass
+
+
+def _ws_call(
+    sock: socket.socket,
+    message_id: int,
+    method: str,
+    params: dict[str, Any] | None = None,
+    *,
+    session_id: str | None = None,
+    timeout: float = 3.0,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"id": message_id, "method": method, "params": params or {}}
+    if session_id:
+        payload["sessionId"] = session_id
+    _ws_send(sock, json.dumps(payload))
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        sock.settimeout(max(0.1, deadline - time.monotonic()))
+        message = json.loads(_ws_recv_text(sock))
+        if message.get("id") == message_id:
+            return message
+    raise TimeoutError(f"CDP call timed out: {method}")
 
 
 def _ws_recv_text(sock: socket.socket) -> str:

@@ -58,6 +58,41 @@ def probe_cdp_endpoint(cdp_url: str, *, timeout: float = 3.0) -> dict[str, Any]:
     return result
 
 
+def restart_cdp_browser_if_configured() -> None:
+    instance_id = os.environ.get("TARGET_BROWSER_INSTANCE_ID")
+    if not instance_id:
+        return
+
+    try:
+        import boto3
+
+        ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+        response = ssm.send_command(
+            InstanceIds=[instance_id],
+            DocumentName="AWS-RunShellScript",
+            Parameters={
+                "commands": [
+                    "sudo systemctl restart poketracker-chrome nginx poketracker-cdp-proxy",
+                    "sleep 3",
+                    "curl -sS --max-time 5 http://127.0.0.1:9222/json/version >/dev/null",
+                ]
+            },
+            TimeoutSeconds=60,
+        )
+        command_id = response["Command"]["CommandId"]
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            invocation = ssm.get_command_invocation(CommandId=command_id, InstanceId=instance_id)
+            status = invocation.get("Status")
+            if status == "Success":
+                return
+            if status in {"Cancelled", "Cancelling", "Failed", "TimedOut"}:
+                return
+            time.sleep(2)
+    except Exception:
+        return
+
+
 def resolve_cdp_browser_url(cdp_url: str) -> str:
     """Return a CDP websocket URL reachable from the caller.
 

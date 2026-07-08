@@ -38,6 +38,7 @@ from poketracker.checkout_webhook.target_driver import (
     _verify_checkout_profile_visible,
     _wait_for_checkout_ready,
     kill_cdp_service_workers,
+    restart_cdp_browser_if_configured,
     resolve_cdp_browser_url,
 )
 from poketracker.config.watchlist import load_watchlist_file
@@ -155,6 +156,7 @@ def purchase_target_item_from_cdp(
     except ImportError as exc:
         raise CheckoutWebhookError(503, "driver_dependency_missing", "Playwright is not installed") from exc
 
+    restart_cdp_browser_if_configured()
     kill_cdp_service_workers(cdp_url)
     with sync_playwright() as playwright:
         browser = playwright.chromium.connect_over_cdp(resolve_cdp_browser_url(cdp_url))

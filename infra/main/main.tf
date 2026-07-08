@@ -412,6 +412,21 @@ resource "aws_iam_role_policy" "checkout_webhook" {
           data.aws_secretsmanager_secret.target_session.arn,
           data.aws_secretsmanager_secret.target_credentials.arn
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:SendCommand"
+        ]
+        Resource = concat(
+          local.target_checkout_browser_enabled ? [aws_instance.target_checkout_browser[0].arn] : [],
+          ["arn:aws:ssm:${var.aws_region}:*:document/AWS-RunShellScript"]
+        )
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ssm:GetCommandInvocation"
+        Resource = "*"
       }
     ]
   })
@@ -606,6 +621,7 @@ resource "aws_lambda_function" "checkout_webhook" {
     variables = {
       CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN = data.aws_secretsmanager_secret.checkout_webhook_token.arn
       CHECKOUT_PROFILE_SECRET_ARN       = data.aws_secretsmanager_secret.checkout_profile.arn
+      TARGET_BROWSER_INSTANCE_ID        = local.target_checkout_browser_enabled ? aws_instance.target_checkout_browser[0].id : ""
       TARGET_CDP_URL                    = local.target_checkout_browser_enabled ? "http://${aws_instance.target_checkout_browser[0].private_ip}:9222" : ""
       TARGET_SESSION_SECRET_ARN         = data.aws_secretsmanager_secret.target_session.arn
       TARGET_CREDENTIALS_SECRET_ARN     = data.aws_secretsmanager_secret.target_credentials.arn
@@ -647,6 +663,7 @@ resource "aws_lambda_function" "target_session_refresh" {
     variables = {
       TARGET_SESSION_SECRET_ARN     = data.aws_secretsmanager_secret.target_session.arn
       TARGET_CREDENTIALS_SECRET_ARN = data.aws_secretsmanager_secret.target_credentials.arn
+      TARGET_BROWSER_INSTANCE_ID    = local.target_checkout_browser_enabled ? aws_instance.target_checkout_browser[0].id : ""
       TARGET_CDP_URL                = local.target_checkout_browser_enabled ? "http://${aws_instance.target_checkout_browser[0].private_ip}:9222" : ""
       TARGET_SESSION_VERIFY_URL     = var.target_session_verify_url
     }
@@ -683,9 +700,10 @@ resource "aws_lambda_function" "tab_warmer" {
 
   environment {
     variables = {
-      TARGET_CDP_URL            = "http://${aws_instance.target_checkout_browser[0].private_ip}:9222"
-      TARGET_SESSION_SECRET_ARN = data.aws_secretsmanager_secret.target_session.arn
-      TARGET_WARMUP_URLS        = var.target_warmup_urls
+      TARGET_CDP_URL             = "http://${aws_instance.target_checkout_browser[0].private_ip}:9222"
+      TARGET_BROWSER_INSTANCE_ID = aws_instance.target_checkout_browser[0].id
+      TARGET_SESSION_SECRET_ARN  = data.aws_secretsmanager_secret.target_session.arn
+      TARGET_WARMUP_URLS         = var.target_warmup_urls
     }
   }
 

@@ -12,6 +12,7 @@ from poketracker.checkout_webhook.target_driver import (
     _new_target_context,
     kill_cdp_service_workers,
     probe_cdp_endpoint,
+    restart_cdp_browser_if_configured,
     resolve_cdp_browser_url,
 )
 
@@ -47,6 +48,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     cdp_probe = probe_cdp_endpoint(cdp_url)
 
     try:
+        restart_cdp_browser_if_configured()
         kill_cdp_service_workers(cdp_url)
         with sync_playwright() as playwright:
             try:

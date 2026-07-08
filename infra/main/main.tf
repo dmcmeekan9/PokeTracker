@@ -278,6 +278,16 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   security_group_ids  = [aws_security_group.vpc_endpoint[0].id]
 }
 
+resource "aws_vpc_endpoint" "ssm" {
+  count               = local.target_checkout_browser_enabled ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ssm"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = [aws_subnet.public[0].id]
+  security_group_ids  = [aws_security_group.vpc_endpoint[0].id]
+}
+
 resource "aws_ecs_cluster" "main" {
   name = "${local.name_prefix}-cluster"
 }
@@ -420,7 +430,10 @@ resource "aws_iam_role_policy" "checkout_webhook" {
         ]
         Resource = concat(
           local.target_checkout_browser_enabled ? [aws_instance.target_checkout_browser[0].arn] : [],
-          ["arn:aws:ssm:${var.aws_region}:*:document/AWS-RunShellScript"]
+          [
+            "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
+            "arn:aws:ssm:${var.aws_region}:*:document/AWS-RunShellScript"
+          ]
         )
       },
       {
@@ -643,6 +656,7 @@ resource "aws_lambda_function" "checkout_webhook" {
     aws_iam_role_policy_attachment.checkout_webhook_basic,
     aws_iam_role_policy_attachment.checkout_webhook_vpc_access,
     aws_vpc_endpoint.secretsmanager,
+    aws_vpc_endpoint.ssm,
   ]
 }
 
@@ -682,6 +696,7 @@ resource "aws_lambda_function" "target_session_refresh" {
     aws_iam_role_policy_attachment.checkout_webhook_basic,
     aws_iam_role_policy_attachment.checkout_webhook_vpc_access,
     aws_vpc_endpoint.secretsmanager,
+    aws_vpc_endpoint.ssm,
   ]
 }
 
@@ -717,6 +732,7 @@ resource "aws_lambda_function" "tab_warmer" {
     aws_iam_role_policy_attachment.checkout_webhook_basic,
     aws_iam_role_policy_attachment.checkout_webhook_vpc_access,
     aws_vpc_endpoint.secretsmanager,
+    aws_vpc_endpoint.ssm,
   ]
 }
 

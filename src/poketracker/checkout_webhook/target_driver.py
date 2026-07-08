@@ -101,16 +101,6 @@ def kill_cdp_service_workers(cdp_url: str) -> None:
     port = parsed.port or 9222
 
     try:
-        with urllib.request.urlopen(f"http://{host}:{port}/json", timeout=5) as resp:
-            targets = json.loads(resp.read())
-        sw_ids = [t["id"] for t in targets if t.get("type") == "service_worker"]
-    except Exception:
-        return
-
-    if not sw_ids:
-        return
-
-    try:
         with urllib.request.urlopen(f"http://{host}:{port}/json/version", timeout=5) as resp:
             version = json.loads(resp.read())
         ws_url = urlparse(version["webSocketDebuggerUrl"])
@@ -136,15 +126,50 @@ def kill_cdp_service_workers(cdp_url: str) -> None:
             buf += sock.recv(512)
         if b" 101 " not in buf[:100]:
             return
-        for i, target_id in enumerate(sw_ids):
-            _ws_send(sock, json.dumps({"id": i + 1, "method": "Target.closeTarget", "params": {"targetId": target_id}}))
+
+        _ws_send(sock, json.dumps({"id": 1, "method": "Target.getTargets"}))
+        response = json.loads(_ws_recv_text(sock))
+        infos = response.get("result", {}).get("targetInfos", [])
+        sw_ids = [t["targetId"] for t in infos if t.get("type") == "service_worker" and t.get("targetId")]
+        for i, target_id in enumerate(sw_ids, start=2):
+            _ws_send(sock, json.dumps({"id": i, "method": "Target.closeTarget", "params": {"targetId": target_id}}))
             try:
-                sock.recv(256)
+                _ws_recv_text(sock)
             except Exception:
                 pass
         sock.close()
     except Exception:
         pass
+
+
+def _ws_recv_text(sock: socket.socket) -> str:
+    header = sock.recv(2)
+    if len(header) < 2:
+        raise OSError("websocket frame header was incomplete")
+    opcode = header[0] & 0x0F
+    length = header[1] & 0x7F
+    if length == 126:
+        length = struct.unpack(">H", _recv_exact(sock, 2))[0]
+    elif length == 127:
+        length = struct.unpack(">Q", _recv_exact(sock, 8))[0]
+    if header[1] & 0x80:
+        mask = _recv_exact(sock, 4)
+        payload = bytes(b ^ mask[i % 4] for i, b in enumerate(_recv_exact(sock, length)))
+    else:
+        payload = _recv_exact(sock, length)
+    if opcode == 8:
+        raise OSError("websocket closed")
+    return payload.decode("utf-8")
+
+
+def _recv_exact(sock: socket.socket, size: int) -> bytes:
+    data = b""
+    while len(data) < size:
+        chunk = sock.recv(size - len(data))
+        if not chunk:
+            raise OSError("socket closed")
+        data += chunk
+    return data
 
 
 def _ws_send(sock: socket.socket, message: str) -> None:

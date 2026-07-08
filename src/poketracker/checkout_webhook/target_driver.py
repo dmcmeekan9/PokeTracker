@@ -397,10 +397,10 @@ def _add_to_cart_via_js(page: Any) -> bool:
                 const btns = Array.from(document.querySelectorAll('button'));
                 for (const needle of needles) {
                     const btn = btns.find(
-                        b => !b.disabled && b.innerText.trim().toLowerCase().includes(needle)
+                        b => !b.disabled && (b.innerText || b.textContent || '').trim().toLowerCase().includes(needle)
                     );
                     if (btn) {
-                        btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
+                        btn.click();
                         return true;
                     }
                 }
@@ -412,14 +412,31 @@ def _add_to_cart_via_js(page: Any) -> bool:
                 page.wait_for_load_state("domcontentloaded", timeout=3000)
             except Exception:
                 pass
+            page.wait_for_timeout(1000)
             return True
     except Exception:
         pass
     return False
 
 
+def _wait_for_cart_after_add(page: Any) -> bool:
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        html = _page_content(page)
+        if _page_indicates_cart_has_item(html):
+            return True
+        normalized = re.sub(r"\s+", " ", _page_text(page).lower())
+        if re.search(r"added to cart|item added|view cart|checkout", normalized):
+            return True
+        page.wait_for_timeout(300)
+    return False
+
+
 def _add_to_cart(page: Any, url: str, target_credentials: TargetCredentials | None) -> None:
+    deadline = time.monotonic() + 45
     for attempt in range(3):
+        if time.monotonic() >= deadline:
+            break
         if attempt > 0:
             # Brief pause before reload to allow CDN cache to propagate fresh stock state
             page.wait_for_timeout(1500)
@@ -427,9 +444,13 @@ def _add_to_cart(page: Any, url: str, target_credentials: TargetCredentials | No
             _ensure_target_signed_in(page, target_credentials)
             _stop_on_intervention(_page_content(page))
         if _add_to_cart_via_js(page):
-            return
+            if _wait_for_cart_after_add(page):
+                return
+            print(f"[add_to_cart] attempt={attempt} js_click_without_cart url={page.url!r}")
         if _click_first(page, [r"add to cart", r"add for shipping", r"ship it"], "add_to_cart", optional=True):
-            return
+            if _wait_for_cart_after_add(page):
+                return
+            print(f"[add_to_cart] attempt={attempt} locator_click_without_cart url={page.url!r}")
         if _page_indicates_cart_has_item(_page_content(page)):
             return
         try:

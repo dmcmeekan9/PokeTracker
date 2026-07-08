@@ -6,6 +6,7 @@ from poketracker.checkout.target_storage_state import decode_storage_state_secre
 from poketracker.checkout.target_credentials import TargetCredentials
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError
 from poketracker.checkout_webhook.target_driver import (
+    _add_to_cart,
     _click_first_with_auto_login,
     _dismiss_target_overlays,
     _page_has_remembered_target_account,
@@ -113,6 +114,88 @@ def test_payment_selector_with_place_order_is_not_intervention() -> None:
 def test_detects_item_already_in_cart() -> None:
     assert _page_indicates_cart_has_item('<span aria-label="cart">1 in cart</span>')
     assert not _page_indicates_cart_has_item("<main>Your cart is empty</main>")
+
+
+def test_add_to_cart_requires_cart_confirmation(monkeypatch) -> None:
+    page = PageWithUnconfirmedAddToCart()
+    now = {"value": 0.0}
+
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver.time.monotonic", lambda: now["value"])
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver._goto_target_page", lambda *args, **kwargs: None)
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver._ensure_target_signed_in", lambda *args, **kwargs: None)
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver._stop_on_intervention", lambda *args, **kwargs: None)
+
+    def advance(_timeout: int) -> None:
+        now["value"] += 10
+
+    page.wait_for_timeout = advance
+
+    with pytest.raises(CheckoutWebhookError) as exc_info:
+        _add_to_cart(page, "https://www.target.com/p/example", None)
+
+    assert exc_info.value.status == "target_add_to_cart_not_found"
+    assert page.js_clicks >= 1
+
+
+def test_add_to_cart_returns_after_cart_confirmation(monkeypatch) -> None:
+    page = PageWithConfirmedAddToCart()
+
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver._click_first", lambda *args, **kwargs: False)
+
+    _add_to_cart(page, "https://www.target.com/p/example", None)
+
+    assert page.js_clicks == 1
+
+
+class PageWithUnconfirmedAddToCart:
+    url = "https://www.target.com/p/example"
+
+    def __init__(self) -> None:
+        self.js_clicks = 0
+        self.wait_for_timeout = lambda timeout: None
+
+    def evaluate(self, script: str):
+        _ = script
+        self.js_clicks += 1
+        return True
+
+    def wait_for_load_state(self, state: str, timeout: int) -> None:
+        _ = state
+        _ = timeout
+
+    def content(self) -> str:
+        return "<main>Add to cart</main>"
+
+    def locator(self, selector: str):
+        _ = selector
+        return PageTextLocator("Add to cart")
+
+    def get_by_role(self, role: str, name):
+        _ = role
+        _ = name
+        return MissingControl()
+
+    def get_by_text(self, pattern):
+        _ = pattern
+        return MissingControl()
+
+
+class PageWithConfirmedAddToCart(PageWithUnconfirmedAddToCart):
+    def content(self) -> str:
+        return "<main>1 in cart</main>"
+
+    def locator(self, selector: str):
+        _ = selector
+        return PageTextLocator("1 in cart")
+
+
+class PageTextLocator:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def inner_text(self, timeout: int) -> str:
+        _ = timeout
+        return self.text
 
 
 class VisibleControl:

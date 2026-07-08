@@ -7,7 +7,12 @@ from typing import Any
 import boto3
 
 from poketracker.checkout.target_storage_state import decode_storage_state_secret
-from poketracker.checkout_webhook.target_driver import _goto_target_page, _new_target_context, kill_cdp_service_workers
+from poketracker.checkout_webhook.target_driver import (
+    _goto_target_page,
+    _new_target_context,
+    kill_cdp_service_workers,
+    resolve_cdp_browser_url,
+)
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -43,7 +48,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         kill_cdp_service_workers(cdp_url)
         with sync_playwright() as playwright:
             try:
-                browser = playwright.chromium.connect_over_cdp(cdp_url, timeout=10000)
+                browser = playwright.chromium.connect_over_cdp(resolve_cdp_browser_url(cdp_url), timeout=10000)
             except Exception as exc:
                 return _response(200, {"status": "skipped", "message": f"CDP unavailable (EC2 likely stopped): {exc}"})
 

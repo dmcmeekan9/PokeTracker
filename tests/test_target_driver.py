@@ -16,6 +16,7 @@ from poketracker.checkout_webhook.target_driver import (
     _stop_on_intervention,
     _verify_click_candidate_present,
     purchase_target_item,
+    resolve_cdp_browser_url,
 )
 
 
@@ -28,6 +29,44 @@ class PageWithoutQuantityControl:
     def locator(self, selector: str) -> EmptyLocator:
         _ = selector
         return EmptyLocator()
+
+
+def test_resolve_cdp_browser_url_rewrites_loopback_websocket(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return b'{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/browser/abc"}'
+
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver.urllib.request.urlopen", lambda *_args, **_kwargs: Response())
+
+    assert (
+        resolve_cdp_browser_url("http://10.42.0.108:9222")
+        == "ws://10.42.0.108:9222/devtools/browser/abc"
+    )
+
+
+def test_resolve_cdp_browser_url_preserves_remote_websocket(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return b'{"webSocketDebuggerUrl":"ws://10.42.0.108:9222/devtools/browser/abc"}'
+
+    monkeypatch.setattr("poketracker.checkout_webhook.target_driver.urllib.request.urlopen", lambda *_args, **_kwargs: Response())
+
+    assert (
+        resolve_cdp_browser_url("http://10.42.0.108:9222")
+        == "ws://10.42.0.108:9222/devtools/browser/abc"
+    )
 
 
 def test_quantity_two_falls_back_to_one_when_control_is_missing(monkeypatch) -> None:

@@ -10,12 +10,42 @@ import time
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 from typing import Any
 
 from poketracker.checkout.target_credentials import TargetCredentials
 from poketracker.checkout.target_storage_state import decode_storage_state_secret
 from poketracker.checkout_webhook.handler_types import CheckoutWebhookError, PurchaseRequest
+
+
+def resolve_cdp_browser_url(cdp_url: str) -> str:
+    """Return a CDP websocket URL reachable from the caller.
+
+    Chrome behind the EC2 socat proxy advertises a loopback websocket URL in
+    /json/version. Lambda needs the same path on the EC2 private host instead.
+    """
+    parsed = urlparse(cdp_url)
+    if parsed.scheme in {"ws", "wss"}:
+        return cdp_url
+
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 9222
+    scheme = parsed.scheme or "http"
+    version_url = f"{scheme}://{host}:{port}/json/version"
+    try:
+        with urllib.request.urlopen(version_url, timeout=5) as resp:
+            version = json.loads(resp.read())
+        ws_raw = version.get("webSocketDebuggerUrl")
+        if not isinstance(ws_raw, str) or not ws_raw:
+            return cdp_url
+        ws_url = urlparse(ws_raw)
+        if ws_url.hostname not in {"127.0.0.1", "localhost", "::1"}:
+            return ws_raw
+        netloc = f"{host}:{port}"
+        return urlunparse((ws_url.scheme, netloc, ws_url.path, ws_url.params, ws_url.query, ws_url.fragment))
+    except Exception:
+        return cdp_url
+
 
 def kill_cdp_service_workers(cdp_url: str) -> None:
     """Close all service_worker CDP targets via WebSocket before Playwright connects.
@@ -278,7 +308,7 @@ def refresh_target_session_from_cdp(
         raise CheckoutWebhookError(503, "driver_dependency_missing", "Playwright is not installed for the checkout webhook") from exc
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.connect_over_cdp(cdp_url)
+        browser = playwright.chromium.connect_over_cdp(resolve_cdp_browser_url(cdp_url))
         try:
             context = browser.contexts[0] if browser.contexts else browser.new_context()
             page = context.pages[0] if context.pages else context.new_page()

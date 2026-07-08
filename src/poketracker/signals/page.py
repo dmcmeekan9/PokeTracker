@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import random
 import re
 import time
@@ -20,6 +21,13 @@ _BROWSER_HEADERS = {
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
 }
+_TARGET_FULFILLMENT_LOCATIONS = [
+    {"zip": "50023", "state": "IA", "latitude": "41.73", "longitude": "-93.58"},
+    {"zip": "10001", "state": "NY", "latitude": "40.75", "longitude": "-73.99"},
+    {"zip": "60601", "state": "IL", "latitude": "41.88", "longitude": "-87.62"},
+    {"zip": "90210", "state": "CA", "latitude": "34.09", "longitude": "-118.41"},
+    {"zip": "75201", "state": "TX", "latitude": "32.78", "longitude": "-96.80"},
+]
 
 
 class RetailerPageSignalAdapter(SignalAdapter):
@@ -72,8 +80,9 @@ class RetailerPageSignalAdapter(SignalAdapter):
         seller, seller_name = _classify_seller(item, body)
         observed_price = _extract_price(response.text)
         redsky_status = SignalStatus.UNKNOWN
+        redsky_detail = "not_checked"
         if item.retailer.value == "target" and item.sku:
-            redsky_status = self._target_fulfillment_status(item, response.text)
+            redsky_status, redsky_detail = self._target_fulfillment_status(item, response.text)
             if redsky_status == SignalStatus.IN_STOCK:
                 status = SignalStatus.IN_STOCK
             elif redsky_status == SignalStatus.OUT_OF_STOCK and html_status != SignalStatus.IN_STOCK:
@@ -82,7 +91,7 @@ class RetailerPageSignalAdapter(SignalAdapter):
             observed_price = item.msrp
 
         if item.retailer.value == "target" and item.sku:
-            message = f"html={html_status.value} redsky={redsky_status.value}"
+            message = f"html={html_status.value} redsky={redsky_status.value} ({redsky_detail})"
         else:
             message = f"html={html_status.value}"
 
@@ -115,48 +124,63 @@ class RetailerPageSignalAdapter(SignalAdapter):
             raise last_exc
         raise RuntimeError("page request was not attempted")
 
-    def _target_fulfillment_status(self, item: WatchlistItem, html: str) -> SignalStatus:
+    def _target_fulfillment_status(self, item: WatchlistItem, html: str) -> tuple[SignalStatus, str]:
         api_key = _extract_target_redsky_api_key(html)
         visitor_id = _extract_target_visitor_id(html)
         if not api_key:
-            return SignalStatus.UNKNOWN
+            return SignalStatus.UNKNOWN, "missing_api_key"
 
-        params = {
-            "tcin": item.sku,
-            "store_id": "1767",
-            "zip": "50023",
-            "state": "IA",
-            "latitude": "41.73",
-            "longitude": "-93.58",
-            "scheduled_delivery_store_id": "1767",
-            "pricing_store_id": "1767",
-            "has_pricing_store_id": "true",
-            "channel": "WEB",
-            "page": f"/p/A-{item.sku}",
-        }
-        if visitor_id:
-            params["visitor_id"] = visitor_id
+        results: list[str] = []
+        for location in _target_fulfillment_locations():
+            params = {
+                "tcin": item.sku,
+                "store_id": "1767",
+                "zip": location["zip"],
+                "state": location["state"],
+                "latitude": location["latitude"],
+                "longitude": location["longitude"],
+                "scheduled_delivery_store_id": "1767",
+                "pricing_store_id": "1767",
+                "has_pricing_store_id": "true",
+                "channel": "WEB",
+                "page": f"/p/A-{item.sku}",
+            }
+            if visitor_id:
+                params["visitor_id"] = visitor_id
 
-        try:
-            response = requests.get(
-                "https://redsky.target.com/redsky_aggregations/v1/web/product_fulfillment_v1",
-                params=params,
-                headers={
-                    "Accept": "application/json",
-                    "User-Agent": "Mozilla/5.0",
-                    "x-api-key": api_key,
-                    "Cache-Control": "no-cache",
-                    "Pragma": "no-cache",
-                },
-                timeout=self.timeout_seconds,
-            )
-            if response.status_code != 200:
-                return SignalStatus.UNKNOWN
-            payload = response.json()
-        except (ValueError, requests.RequestException):
-            return SignalStatus.UNKNOWN
+            try:
+                response = requests.get(
+                    "https://redsky.target.com/redsky_aggregations/v1/web/product_fulfillment_v1",
+                    params=params,
+                    headers={
+                        "Accept": "application/json",
+                        "User-Agent": "Mozilla/5.0",
+                        "x-api-key": api_key,
+                        "Cache-Control": "no-cache",
+                        "Pragma": "no-cache",
+                    },
+                    timeout=self.timeout_seconds,
+                )
+                location_label = f"{location['zip']}/{location['state']}"
+                if response.status_code != 200:
+                    results.append(f"{location_label}:http_{response.status_code}")
+                    continue
+                payload = response.json()
+            except requests.RequestException as exc:
+                results.append(f"{location['zip']}/{location['state']}:{type(exc).__name__}")
+                continue
+            except ValueError:
+                results.append(f"{location['zip']}/{location['state']}:invalid_json")
+                continue
 
-        return _extract_target_fulfillment_status(payload)
+            status = _extract_target_fulfillment_status(payload)
+            results.append(f"{location_label}:{status.value}")
+            if status == SignalStatus.IN_STOCK:
+                return status, ";".join(results)
+
+        if results and all(result.endswith(f":{SignalStatus.OUT_OF_STOCK.value}") for result in results):
+            return SignalStatus.OUT_OF_STOCK, ";".join(results)
+        return SignalStatus.UNKNOWN, ";".join(results) or "no_locations"
 
 
 def _extract_price(text: str) -> Decimal | None:
@@ -216,6 +240,28 @@ def _extract_target_visitor_id(text: str) -> str | None:
         if match:
             return quote(match.group(1), safe="")
     return None
+
+
+def _target_fulfillment_locations() -> list[dict[str, str]]:
+    raw = os.environ.get("TARGET_FULFILLMENT_LOCATIONS")
+    if not raw:
+        return _TARGET_FULFILLMENT_LOCATIONS
+
+    locations: list[dict[str, str]] = []
+    for part in raw.split(";"):
+        fields = [field.strip() for field in part.split(",")]
+        if len(fields) != 4 or any(not field for field in fields):
+            continue
+        zip_code, state, latitude, longitude = fields
+        locations.append(
+            {
+                "zip": zip_code,
+                "state": state.upper(),
+                "latitude": latitude,
+                "longitude": longitude,
+            }
+        )
+    return locations or _TARGET_FULFILLMENT_LOCATIONS
 
 
 def _extract_target_fulfillment_status(payload: dict) -> SignalStatus:

@@ -9,6 +9,7 @@ from poketracker.checkout_webhook.target_driver import (
     _add_to_cart,
     _click_first_with_auto_login,
     _dismiss_target_overlays,
+    _new_target_context,
     _page_has_remembered_target_account,
     _page_indicates_cart_has_item,
     _resume_checkout_after_sign_in,
@@ -67,6 +68,33 @@ def test_resolve_cdp_browser_url_preserves_remote_websocket(monkeypatch) -> None
         resolve_cdp_browser_url("http://10.42.0.108:9222")
         == "ws://10.42.0.108:9222/devtools/browser/abc"
     )
+
+
+def test_new_target_context_retries_without_bad_storage_state() -> None:
+    browser = BrowserRejectingStorageState()
+
+    context = _new_target_context(browser, {"cookies": [], "origins": []})
+
+    assert context is browser.context
+    assert browser.calls[0]["storage_state"] == {"cookies": [], "origins": []}
+    assert "storage_state" not in browser.calls[1]
+
+
+class BrowserRejectingStorageState:
+    def __init__(self) -> None:
+        self.calls = []
+        self.context = ContextWithInitScript()
+
+    def new_context(self, **kwargs):
+        self.calls.append(kwargs)
+        if "storage_state" in kwargs:
+            raise RuntimeError("bad storage")
+        return self.context
+
+
+class ContextWithInitScript:
+    def add_init_script(self, script: str) -> None:
+        self.script = script
 
 
 def test_quantity_two_falls_back_to_one_when_control_is_missing(monkeypatch) -> None:

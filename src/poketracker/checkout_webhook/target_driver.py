@@ -359,15 +359,19 @@ def _launch_target_browser(playwright: Any) -> Any:
 
 
 def _new_target_context(browser: Any, storage_state: dict[str, Any]) -> Any:
-    context = browser.new_context(
-        storage_state=storage_state,
-        viewport={"width": 1365, "height": 900},
-        user_agent=TARGET_USER_AGENT,
-        locale="en-US",
-        timezone_id="America/Chicago",
-        geolocation={"latitude": 41.7318, "longitude": -93.6001},
-        permissions=["geolocation"],
-    )
+    context_options = {
+        "viewport": {"width": 1365, "height": 900},
+        "user_agent": TARGET_USER_AGENT,
+        "locale": "en-US",
+        "timezone_id": "America/Chicago",
+        "geolocation": {"latitude": 41.7318, "longitude": -93.6001},
+        "permissions": ["geolocation"],
+    }
+    try:
+        context = browser.new_context(storage_state=storage_state, **context_options)
+    except Exception as exc:
+        print(f"[target_context] storage_state_context_failed fallback=fresh_context error={exc}")
+        context = browser.new_context(**context_options)
     context.add_init_script(
         """
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });

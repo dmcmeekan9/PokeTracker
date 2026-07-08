@@ -38,6 +38,7 @@ from poketracker.checkout_webhook.target_driver import (
     _verify_checkout_profile_visible,
     _wait_for_checkout_ready,
     kill_cdp_service_workers,
+    resolve_cdp_browser_url,
 )
 from poketracker.config.watchlist import load_watchlist_file
 from poketracker.models import DecisionType, Retailer, SellerClassification
@@ -156,7 +157,7 @@ def purchase_target_item_from_cdp(
 
     kill_cdp_service_workers(cdp_url)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.connect_over_cdp(cdp_url)
+        browser = playwright.chromium.connect_over_cdp(resolve_cdp_browser_url(cdp_url))
         try:
             prewarmed = _find_prewarmed_tab(browser, request.url)
             if prewarmed:

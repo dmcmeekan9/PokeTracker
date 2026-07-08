@@ -460,14 +460,14 @@ resource "aws_instance" "target_checkout_browser" {
     encrypted   = true
   }
 
-  user_data_replace_on_change = false
+  user_data_replace_on_change = true
   user_data                   = <<-EOF
     #!/bin/bash
     set -euxo pipefail
     export DEBIAN_FRONTEND=noninteractive
 
     apt-get update
-    apt-get install -y ca-certificates curl gnupg openbox socat xvfb x11vnc
+    apt-get install -y ca-certificates curl gnupg openbox xvfb x11vnc
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
     chmod a+r /etc/apt/keyrings/google-chrome.gpg
@@ -518,13 +518,13 @@ resource "aws_instance" "target_checkout_browser" {
     Description=PokeTracker persistent Target checkout Chrome
     After=poketracker-display.service network-online.target
     Requires=poketracker-display.service
-    Wants=network-online.target poketracker-cdp-proxy.service
+    Wants=network-online.target
 
     [Service]
     User=poketracker
     Environment=DISPLAY=:1
     ExecStartPre=/bin/sh -c 'rm -rf "/opt/poketracker/chrome-profile/Default/Service Worker" "/opt/poketracker/chrome-profile/Default/Last Session" "/opt/poketracker/chrome-profile/Default/Last Tabs"'
-    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --no-restore-last-session --disable-dev-shm-usage --disable-features=ServiceWorker --window-size=1365,900 about:blank
+    ExecStart=/usr/bin/google-chrome-stable --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --remote-allow-origins=* --user-data-dir=/opt/poketracker/chrome-profile --no-first-run --no-restore-last-session --disable-dev-shm-usage --disable-features=ServiceWorker --window-size=1365,900 about:blank
     Restart=always
     RestartSec=5
 
@@ -532,22 +532,8 @@ resource "aws_instance" "target_checkout_browser" {
     WantedBy=multi-user.target
     UNIT
 
-    cat >/etc/systemd/system/poketracker-cdp-proxy.service <<'UNIT'
-    [Unit]
-    Description=PokeTracker CDP proxy for Lambda access
-    After=network-online.target poketracker-chrome.service
-    Wants=network-online.target
-    Requires=poketracker-chrome.service
-    PartOf=poketracker-chrome.service
-
-    [Service]
-    ExecStart=/usr/bin/socat TCP-LISTEN:9222,bind=0.0.0.0,reuseaddr,fork TCP:127.0.0.1:9223
-    Restart=always
-    RestartSec=5
-
-    [Install]
-    WantedBy=multi-user.target
-    UNIT
+    systemctl disable --now poketracker-cdp-proxy 2>/dev/null || true
+    rm -f /etc/systemd/system/poketracker-cdp-proxy.service
 
     cat >/etc/systemd/system/poketracker-vnc.service <<'UNIT'
     [Unit]
@@ -567,7 +553,7 @@ resource "aws_instance" "target_checkout_browser" {
     UNIT
 
     systemctl daemon-reload
-    systemctl enable --now poketracker-display poketracker-openbox poketracker-chrome poketracker-cdp-proxy poketracker-vnc
+    systemctl enable --now poketracker-display poketracker-openbox poketracker-chrome poketracker-vnc
   EOF
 
   tags = {

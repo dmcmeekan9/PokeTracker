@@ -254,7 +254,7 @@ resource "aws_security_group" "target_checkout_browser" {
 resource "aws_security_group" "vpc_endpoint" {
   count       = local.target_checkout_browser_enabled ? 1 : 0
   name        = "${local.name_prefix}-vpc-endpoint"
-  description = "Interface endpoint access from checkout Lambda."
+  description = "Interface endpoint access from checkout Lambda, ECS tasks, and the browser host."
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -263,7 +263,8 @@ resource "aws_security_group" "vpc_endpoint" {
     protocol  = "tcp"
     security_groups = [
       aws_security_group.checkout_webhook_lambda[0].id,
-      aws_security_group.task.id
+      aws_security_group.task.id,
+      aws_security_group.target_checkout_browser[0].id
     ]
   }
 }
@@ -282,6 +283,26 @@ resource "aws_vpc_endpoint" "ssm" {
   count               = local.target_checkout_browser_enabled ? 1 : 0
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.ssm"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = [aws_subnet.public[0].id]
+  security_group_ids  = [aws_security_group.vpc_endpoint[0].id]
+}
+
+resource "aws_vpc_endpoint" "ec2messages" {
+  count               = local.target_checkout_browser_enabled ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ec2messages"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = [aws_subnet.public[0].id]
+  security_group_ids  = [aws_security_group.vpc_endpoint[0].id]
+}
+
+resource "aws_vpc_endpoint" "ssmmessages" {
+  count               = local.target_checkout_browser_enabled ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ssmmessages"
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
   subnet_ids          = [aws_subnet.public[0].id]

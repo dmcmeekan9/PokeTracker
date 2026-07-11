@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from poketracker import main as poketracker_main
+from poketracker.models import ProductType, Retailer, SellerClassification, SignalStatus, StockSignal, WatchlistItem
 
 
 def test_optional_positive_int_accepts_positive_value(monkeypatch) -> None:
@@ -36,3 +39,68 @@ def test_burst_runs_until_duration_expires(monkeypatch) -> None:
     poketracker_main._run_burst(duration_seconds=25, interval_seconds=10)
 
     assert runs == [0.0, 11.0, 22.0]
+
+
+def test_target_stock_probe_requires_configured_item_and_redsky_403(monkeypatch) -> None:
+    poketracker_main._LAST_TARGET_PROBE_AT.clear()
+    monkeypatch.setenv("TARGET_STOCK_PROBE_ITEM_IDS", "target-ascended-heroes-booster-bundle")
+    monkeypatch.setattr(poketracker_main.time, "monotonic", lambda: 100.0)
+
+    assert poketracker_main._should_probe_target_stock(
+        target_signal(
+            item_id="target-ascended-heroes-booster-bundle",
+            message="html=out_of_stock redsky=unknown (50023/IA:http_403)",
+        )
+    )
+    assert not poketracker_main._should_probe_target_stock(
+        target_signal(
+            item_id="target-ascended-heroes-etb",
+            message="html=out_of_stock redsky=unknown (50023/IA:http_403)",
+        )
+    )
+    assert not poketracker_main._should_probe_target_stock(
+        target_signal(
+            item_id="target-ascended-heroes-booster-bundle",
+            message="html=out_of_stock redsky=unknown (50023/IA:http_503)",
+        )
+    )
+
+
+def test_target_stock_probe_obeys_cooldown(monkeypatch) -> None:
+    poketracker_main._LAST_TARGET_PROBE_AT.clear()
+    monkeypatch.setenv("TARGET_STOCK_PROBE_ITEM_IDS", "target-ascended-heroes-booster-bundle")
+    monkeypatch.setenv("TARGET_STOCK_PROBE_COOLDOWN_SECONDS", "30")
+    now = {"value": 100.0}
+    monkeypatch.setattr(poketracker_main.time, "monotonic", lambda: now["value"])
+    signal = target_signal(
+        item_id="target-ascended-heroes-booster-bundle",
+        message="html=out_of_stock redsky=unknown (50023/IA:http_403)",
+    )
+
+    assert poketracker_main._should_probe_target_stock(signal)
+    now["value"] = 120.0
+    assert not poketracker_main._should_probe_target_stock(signal)
+    now["value"] = 131.0
+    assert poketracker_main._should_probe_target_stock(signal)
+
+
+def target_signal(item_id: str, message: str) -> StockSignal:
+    item = WatchlistItem(
+        id=item_id,
+        name="Target: Ascended Heroes Booster Bundle",
+        retailer=Retailer.TARGET,
+        url="https://www.target.com/p/example/-/A-95120834",
+        type=ProductType.BOOSTER_BUNDLE,
+        msrp=Decimal("31.99"),
+        max_quantity=2,
+        enabled=True,
+        sku="95120834",
+    )
+    return StockSignal(
+        item=item,
+        status=SignalStatus.OUT_OF_STOCK,
+        seller=SellerClassification.RETAILER,
+        seller_name="Target",
+        source="page",
+        message=message,
+    )

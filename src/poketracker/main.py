@@ -13,6 +13,7 @@ from poketracker.checkout.base import CheckoutAdapter
 from poketracker.checkout.dry_run import DryRunCheckoutAdapter, UnconfiguredCheckoutAdapter
 from poketracker.checkout.http import HttpCheckoutAdapter
 from poketracker.models import DecisionType, Retailer, StockSignal, WatchlistItem
+from poketracker.models import SellerClassification, SignalStatus
 from poketracker.notify.email import SesNotifier
 from poketracker.rules.engine import RulesEngine, current_week_start_iso
 from poketracker.signals.base import SignalAdapter
@@ -22,6 +23,7 @@ from poketracker.storage.dynamodb import DynamoStore
 
 LOGGER = logging.getLogger(__name__)
 ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
+_LAST_TARGET_PROBE_AT: dict[str, float] = {}
 
 
 def main() -> None:
@@ -82,6 +84,34 @@ def run_once() -> None:
                         reason="item already has a recorded v2 purchase this week",
                         weekly_spend_after=weekly_spend,
                     )
+            if (
+                config.global_config.purchasing_enabled
+                and decision.type == DecisionType.SKIP
+                and _should_probe_target_stock(signal)
+            ):
+                probe_signal = replace(
+                    signal,
+                    status=SignalStatus.IN_STOCK,
+                    observed_price=signal.observed_price or item.msrp,
+                    seller=SellerClassification.RETAILER,
+                    seller_name=signal.seller_name or "Target",
+                    source=f"{signal.source}+target_probe",
+                    message=f"{signal.message}; target_stock_probe=enabled",
+                )
+                probe_decision = engine.evaluate(probe_signal, weekly_spend)
+                if probe_decision.type == DecisionType.WOULD_BUY:
+                    if store.item_purchased_this_week(item.id, week_start):
+                        decision = replace(
+                            probe_decision,
+                            type=DecisionType.SKIP,
+                            reason="item already has a recorded v2 purchase this week",
+                            weekly_spend_after=weekly_spend,
+                        )
+                    else:
+                        decision = replace(
+                            probe_decision,
+                            reason=f"probe checkout: {probe_decision.reason}",
+                        )
             if decision.type == DecisionType.WOULD_BUY:
                 pending.append((item, decision))
             else:
@@ -196,6 +226,31 @@ def _optional_positive_int(name: str) -> int | None:
         LOGGER.warning("%s must be positive; ignoring value=%r", name, raw)
         return None
     return value
+
+
+def _should_probe_target_stock(signal: StockSignal) -> bool:
+    item = signal.item
+    if item.retailer != Retailer.TARGET or signal.status != SignalStatus.OUT_OF_STOCK:
+        return False
+    if not item.sku or item.id not in _target_stock_probe_item_ids():
+        return False
+    message = signal.message or ""
+    if "redsky=unknown" not in message or "http_403" not in message:
+        return False
+
+    cooldown = _optional_positive_int("TARGET_STOCK_PROBE_COOLDOWN_SECONDS") or 30
+    now = time.monotonic()
+    last_probe_at = _LAST_TARGET_PROBE_AT.get(item.id)
+    if last_probe_at is not None and now - last_probe_at < cooldown:
+        return False
+    _LAST_TARGET_PROBE_AT[item.id] = now
+    LOGGER.info("target stock probe enabled for %s after Redsky 403 with stale out-of-stock HTML", item.id)
+    return True
+
+
+def _target_stock_probe_item_ids() -> set[str]:
+    raw = os.environ.get("TARGET_STOCK_PROBE_ITEM_IDS", "")
+    return {part.strip() for part in raw.split(",") if part.strip()}
 
 
 if __name__ == "__main__":

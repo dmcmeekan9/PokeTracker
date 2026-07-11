@@ -832,7 +832,9 @@ resource "aws_ecs_task_definition" "app" {
         { name = "CHECKOUT_WEBHOOK_URL", value = local.checkout_webhook_url },
         { name = "CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN", value = data.aws_secretsmanager_secret.checkout_webhook_token.arn },
         { name = "CHECKOUT_PROFILE_SECRET_ARN", value = data.aws_secretsmanager_secret.checkout_profile.arn },
-        { name = "TARGET_SESSION_SECRET_ARN", value = data.aws_secretsmanager_secret.target_session.arn }
+        { name = "TARGET_SESSION_SECRET_ARN", value = data.aws_secretsmanager_secret.target_session.arn },
+        { name = "TARGET_STOCK_PROBE_ITEM_IDS", value = "target-ascended-heroes-booster-bundle" },
+        { name = "TARGET_STOCK_PROBE_COOLDOWN_SECONDS", value = "30" }
       ]
       logConfiguration = {
         logDriver = "awslogs"

@@ -495,7 +495,9 @@ resource "aws_instance" "target_checkout_browser" {
     export DEBIAN_FRONTEND=noninteractive
 
     apt-get update
-    apt-get install -y ca-certificates curl gnupg nginx openbox xvfb x11vnc
+    apt-get install -y ca-certificates curl gnupg nginx openbox snapd xvfb x11vnc
+    snap install amazon-ssm-agent --classic || true
+    systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || systemctl enable --now amazon-ssm-agent
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
     chmod a+r /etc/apt/keyrings/google-chrome.gpg

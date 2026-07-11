@@ -1090,7 +1090,8 @@ def _set_target_quantity(page: Any, quantity: int) -> int:
 
 def _stop_on_intervention(html: str) -> None:
     normalized = re.sub(r"\s+", " ", html.lower())
-    ready_to_order = bool(re.search(r"place\s+(?:your\s+)?order|submit\s+order", normalized))
+    visible_normalized = _visible_html_text(html)
+    ready_to_order = bool(re.search(r"place\s+(?:your\s+)?order|submit\s+order", visible_normalized))
     interventions = [
         ("captcha", r"\bcaptcha\b"),
         ("captcha", r"verify you(?:'| a)?re (?:a )?human"),
@@ -1127,13 +1128,22 @@ def _stop_on_intervention(html: str) -> None:
     ]
     if not ready_to_order:
         for pattern in soft_payment_interventions:
-            if re.search(pattern, normalized, re.IGNORECASE):
-                snippet = normalized[max(0, normalized.find("payment")-50):normalized.find("payment")+200]
+            if re.search(pattern, visible_normalized, re.IGNORECASE):
+                snippet = visible_normalized[
+                    max(0, visible_normalized.find("payment") - 50) : visible_normalized.find("payment") + 200
+                ]
                 raise CheckoutWebhookError(
                     409,
                     "payment_intervention",
                     f"Target checkout requires intervention: payment_intervention. snippet={snippet!r}",
                 )
+
+
+def _visible_html_text(html: str) -> str:
+    without_scripts = re.sub(r"<script\b[^>]*>.*?</script>", " ", html, flags=re.IGNORECASE | re.DOTALL)
+    without_styles = re.sub(r"<style\b[^>]*>.*?</style>", " ", without_scripts, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<[^>]+>", " ", without_styles)
+    return re.sub(r"\s+", " ", text.lower())
 
 
 _SIGN_IN_PATTERNS = [

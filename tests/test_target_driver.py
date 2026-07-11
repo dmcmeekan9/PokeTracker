@@ -191,6 +191,17 @@ def test_payment_selector_with_place_order_is_not_intervention() -> None:
     )
 
 
+def test_payment_feature_flags_are_not_intervention() -> None:
+    _stop_on_intervention(
+        """
+        <script>
+          {"buy_now_third_party_payments_enabled": true, "select_payment_type_enabled": true}
+        </script>
+        <main>Checkout Shipping arrives Wednesday</main>
+        """
+    )
+
+
 def test_detects_item_already_in_cart() -> None:
     assert _page_indicates_cart_has_item('<span aria-label="cart">1 in cart</span>')
     assert not _page_indicates_cart_has_item("<main>Your cart is empty</main>")

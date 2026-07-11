@@ -254,7 +254,7 @@ resource "aws_security_group" "target_checkout_browser" {
 resource "aws_security_group" "vpc_endpoint" {
   count       = local.target_checkout_browser_enabled ? 1 : 0
   name        = "${local.name_prefix}-vpc-endpoint"
-  description = "Interface endpoint access from checkout Lambda, ECS tasks, and the browser host."
+  description = "Interface endpoint access from checkout Lambda."
   vpc_id      = aws_vpc.main.id
 
   ingress {

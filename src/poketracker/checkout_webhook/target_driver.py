@@ -630,13 +630,42 @@ def _add_to_cart_via_js(page: Any) -> bool:
         clicked = page.evaluate(
             """() => {
                 const needles = ['add to cart', 'add for shipping', 'ship it'];
-                const btns = Array.from(document.querySelectorAll('button'));
+                const isVisible = (el) => {
+                    const style = window.getComputedStyle(el);
+                    const box = el.getBoundingClientRect();
+                    return style.visibility !== 'hidden' && style.display !== 'none' && box.width > 0 && box.height > 0;
+                };
+                const clickTarget = (el) => {
+                    const target = el.closest('button,[role="button"],a,[data-test*="Button"],[data-test*="button"]') || el;
+                    if (target.disabled || target.getAttribute('aria-disabled') === 'true' || !isVisible(target)) {
+                        return false;
+                    }
+                    target.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
+                    return true;
+                };
+                const controls = Array.from(document.querySelectorAll('button,[role="button"],a,[data-test*="Button"],[data-test*="button"]'));
                 for (const needle of needles) {
-                    const btn = btns.find(
-                        b => !b.disabled && (b.innerText || b.textContent || '').trim().toLowerCase().includes(needle)
+                    const control = controls.find((el) =>
+                        (el.innerText || el.textContent || '').trim().toLowerCase().includes(needle)
                     );
-                    if (btn) {
-                        btn.click();
+                    if (control && clickTarget(control)) {
+                        return true;
+                    }
+                    const textNode = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while ((node = textNode.nextNode())) {
+                        if (!node.textContent || !node.textContent.trim().toLowerCase().includes(needle)) {
+                            continue;
+                        }
+                        const parent = node.parentElement;
+                        if (parent && clickTarget(parent)) {
+                            return true;
+                        }
+                    }
+                    const fallback = Array.from(document.querySelectorAll('*')).find((el) =>
+                        (el.innerText || el.textContent || '').trim().toLowerCase() === needle
+                    );
+                    if (fallback && clickTarget(fallback)) {
                         return true;
                     }
                 }

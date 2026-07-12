@@ -3,7 +3,16 @@ from __future__ import annotations
 from decimal import Decimal
 
 from poketracker import main as poketracker_main
-from poketracker.models import ProductType, Retailer, SellerClassification, SignalStatus, StockSignal, WatchlistItem
+from poketracker.models import (
+    Decision,
+    DecisionType,
+    ProductType,
+    Retailer,
+    SellerClassification,
+    SignalStatus,
+    StockSignal,
+    WatchlistItem,
+)
 
 
 def test_optional_positive_int_accepts_positive_value(monkeypatch) -> None:
@@ -82,6 +91,33 @@ def test_target_stock_probe_obeys_cooldown(monkeypatch) -> None:
     assert not poketracker_main._should_probe_target_stock(signal)
     now["value"] = 131.0
     assert poketracker_main._should_probe_target_stock(signal)
+
+
+def test_target_stock_probe_add_to_cart_miss_is_non_alerting_skip() -> None:
+    signal = target_signal(
+        item_id="target-ascended-heroes-booster-bundle",
+        message="html=out_of_stock redsky=unknown (50023/IA:http_403)",
+    )
+    decision = Decision(
+        type=DecisionType.PURCHASE_FAILED,
+        item=signal.item,
+        reason="probe checkout: would buy",
+        observed_price=Decimal("31.99"),
+        msrp=Decimal("31.99"),
+        seller=SellerClassification.RETAILER,
+        quantity=2,
+        weekly_spend_before=Decimal("0"),
+        weekly_spend_after=Decimal("63.98"),
+        url=signal.item.url,
+        checkout_status="target_add_to_cart_not_found",
+        checkout_message="Target checkout could not find the add_to_cart control",
+    )
+
+    result = poketracker_main._suppress_expected_target_probe_miss(decision)
+
+    assert result.type == DecisionType.SKIP
+    assert result.weekly_spend_after == Decimal("0")
+    assert "stock probe" in result.reason
 
 
 def target_signal(item_id: str, message: str) -> StockSignal:

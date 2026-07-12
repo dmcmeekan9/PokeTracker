@@ -108,6 +108,26 @@ def test_http_checkout_records_rejection(monkeypatch) -> None:
     assert result.checkout_message == "sold out"
 
 
+def test_http_checkout_records_webhook_error_status(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "requests.post",
+        lambda *args, **kwargs: Response(
+            409,
+            data={
+                "status": "target_add_to_cart_not_found",
+                "message": "Target checkout could not find the add_to_cart control",
+            },
+            text='{"status":"target_add_to_cart_not_found"}',
+        ),
+    )
+
+    result = HttpCheckoutAdapter("https://checkout.example.com/purchase").execute(decision())
+
+    assert result.type == DecisionType.PURCHASE_FAILED
+    assert result.checkout_status == "target_add_to_cart_not_found"
+    assert result.checkout_message == "Target checkout could not find the add_to_cart control"
+
+
 def test_http_checkout_records_request_error(monkeypatch) -> None:
     def post(*args, **kwargs):
         raise requests.Timeout("too slow")

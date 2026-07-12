@@ -39,11 +39,13 @@ class HttpCheckoutAdapter(CheckoutAdapter):
         message = response.text.strip()[:500] or None
         data = _json_or_empty(response)
         if not 200 <= response.status_code < 300:
+            error_status = _first_str(data, "status") or str(response.status_code)
+            error_message = _first_str(data, "message") or message
             return _failed(
                 decision,
                 f"purchase request rejected with HTTP {response.status_code}",
-                str(response.status_code),
-                message,
+                error_status,
+                error_message,
             )
 
         order_id = _first_str(data, "order_id", "orderId", "confirmation_number", "confirmationNumber")

@@ -124,7 +124,7 @@ def run_once() -> None:
         def _execute_checkout(args: tuple[WatchlistItem, Any]) -> tuple[WatchlistItem, Any]:
             item, decision = args
             try:
-                return item, checkout.execute(decision)
+                return item, _suppress_expected_target_probe_miss(checkout.execute(decision))
             except Exception:
                 LOGGER.exception("checkout execute failed softly: %s", item.id)
                 return item, decision
@@ -251,6 +251,22 @@ def _should_probe_target_stock(signal: StockSignal) -> bool:
 def _target_stock_probe_item_ids() -> set[str]:
     raw = os.environ.get("TARGET_STOCK_PROBE_ITEM_IDS", "")
     return {part.strip() for part in raw.split(",") if part.strip()}
+
+
+def _suppress_expected_target_probe_miss(decision: Any) -> Any:
+    if (
+        decision.type == DecisionType.PURCHASE_FAILED
+        and decision.item.retailer == Retailer.TARGET
+        and decision.reason.startswith("probe checkout:")
+        and decision.checkout_status == "target_add_to_cart_not_found"
+    ):
+        return replace(
+            decision,
+            type=DecisionType.SKIP,
+            reason="target stock probe did not find a purchasable add-to-cart control",
+            weekly_spend_after=decision.weekly_spend_before,
+        )
+    return decision
 
 
 if __name__ == "__main__":

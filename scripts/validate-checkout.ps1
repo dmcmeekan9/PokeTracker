@@ -112,7 +112,7 @@ print(r.get("result",{}).get("result",{}).get("value",0))
 time.sleep(3);ws.close()
 '@
 $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($clearPy))
-$remoteCommand = "python3 -c 'import websocket' >/dev/null 2>&1 || pip3 install -q websocket-client >/dev/null 2>&1`necho '$encoded' | base64 -d | python3"
+$remoteCommand = "if ! command -v pip3 >/dev/null 2>&1; then apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq python3-pip >/dev/null 2>&1; fi`npython3 -c 'import websocket' >/dev/null 2>&1 || python3 -m pip install -q websocket-client >/dev/null 2>&1`necho '$encoded' | base64 -d | python3"
 $parameters = @{ commands = @($remoteCommand) } | ConvertTo-Json -Compress
 
 $commandId = & aws ssm send-command `

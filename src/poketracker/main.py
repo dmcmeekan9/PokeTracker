@@ -124,7 +124,7 @@ def run_once() -> None:
         def _execute_checkout(args: tuple[WatchlistItem, Any]) -> tuple[WatchlistItem, Any]:
             item, decision = args
             try:
-                return item, _suppress_expected_target_probe_miss(checkout.execute(decision))
+                return item, _suppress_expected_target_probe_miss(decision, checkout.execute(decision))
             except Exception:
                 LOGGER.exception("checkout execute failed softly: %s", item.id)
                 return item, decision
@@ -253,20 +253,20 @@ def _target_stock_probe_item_ids() -> set[str]:
     return {part.strip() for part in raw.split(",") if part.strip()}
 
 
-def _suppress_expected_target_probe_miss(decision: Any) -> Any:
+def _suppress_expected_target_probe_miss(original_decision: Any, checkout_decision: Any) -> Any:
     if (
-        decision.type == DecisionType.PURCHASE_FAILED
-        and decision.item.retailer == Retailer.TARGET
-        and decision.reason.startswith("probe checkout:")
-        and decision.checkout_status == "target_add_to_cart_not_found"
+        original_decision.reason.startswith("probe checkout:")
+        and checkout_decision.type == DecisionType.PURCHASE_FAILED
+        and checkout_decision.item.retailer == Retailer.TARGET
+        and checkout_decision.checkout_status == "target_add_to_cart_not_found"
     ):
         return replace(
-            decision,
+            checkout_decision,
             type=DecisionType.SKIP,
             reason="target stock probe did not find a purchasable add-to-cart control",
-            weekly_spend_after=decision.weekly_spend_before,
+            weekly_spend_after=checkout_decision.weekly_spend_before,
         )
-    return decision
+    return checkout_decision
 
 
 if __name__ == "__main__":

@@ -98,8 +98,8 @@ def test_target_stock_probe_add_to_cart_miss_is_non_alerting_skip() -> None:
         item_id="target-ascended-heroes-booster-bundle",
         message="html=out_of_stock redsky=unknown (50023/IA:http_403)",
     )
-    decision = Decision(
-        type=DecisionType.PURCHASE_FAILED,
+    original_decision = Decision(
+        type=DecisionType.WOULD_BUY,
         item=signal.item,
         reason="probe checkout: would buy",
         observed_price=Decimal("31.99"),
@@ -109,11 +109,23 @@ def test_target_stock_probe_add_to_cart_miss_is_non_alerting_skip() -> None:
         weekly_spend_before=Decimal("0"),
         weekly_spend_after=Decimal("63.98"),
         url=signal.item.url,
+    )
+    checkout_decision = Decision(
+        type=DecisionType.PURCHASE_FAILED,
+        item=signal.item,
+        reason="purchase request rejected with HTTP 409",
+        observed_price=Decimal("31.99"),
+        msrp=Decimal("31.99"),
+        seller=SellerClassification.RETAILER,
+        quantity=2,
+        weekly_spend_before=Decimal("0"),
+        weekly_spend_after=Decimal("0"),
+        url=signal.item.url,
         checkout_status="target_add_to_cart_not_found",
         checkout_message="Target checkout could not find the add_to_cart control",
     )
 
-    result = poketracker_main._suppress_expected_target_probe_miss(decision)
+    result = poketracker_main._suppress_expected_target_probe_miss(original_decision, checkout_decision)
 
     assert result.type == DecisionType.SKIP
     assert result.weekly_spend_after == Decimal("0")

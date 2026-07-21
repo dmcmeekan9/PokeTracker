@@ -856,8 +856,8 @@ resource "aws_ecs_task_definition" "app" {
         { name = "CHECKOUT_WEBHOOK_TOKEN_SECRET_ARN", value = data.aws_secretsmanager_secret.checkout_webhook_token.arn },
         { name = "CHECKOUT_PROFILE_SECRET_ARN", value = data.aws_secretsmanager_secret.checkout_profile.arn },
         { name = "TARGET_SESSION_SECRET_ARN", value = data.aws_secretsmanager_secret.target_session.arn },
-        { name = "TARGET_STOCK_PROBE_ITEM_IDS", value = "target-ascended-heroes-booster-bundle" },
-        { name = "TARGET_STOCK_PROBE_COOLDOWN_SECONDS", value = "30" }
+        { name = "TARGET_STOCK_PROBE_ITEM_IDS", value = "target-ascended-heroes-etb,target-ascended-heroes-booster-bundle,target-ascended-heroes-poster-collection,target-temporal-forces-etb,target-temporal-forces-iron-leaves-etb,target-paldean-fates-etb,target-paldean-fates-bb,target-destined-rivals-booster-bundle,target-prismatic-evolutions-etb,target-prismatic-evolutions-booster-bundle" },
+        { name = "TARGET_STOCK_PROBE_COOLDOWN_SECONDS", value = "300" }
       ]
       logConfiguration = {
         logDriver = "awslogs"

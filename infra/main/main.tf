@@ -583,6 +583,13 @@ resource "aws_instance" "target_checkout_browser" {
     WantedBy=multi-user.target
     UNIT
 
+    cat >/etc/nginx/conf.d/cdp-upgrade-map.conf <<'NGINX'
+    map $http_upgrade $connection_upgrade {
+      default upgrade;
+      ""      close;
+    }
+    NGINX
+
     cat >/etc/nginx/sites-available/poketracker-cdp <<'NGINX'
     server {
       listen 9222;
@@ -592,7 +599,7 @@ resource "aws_instance" "target_checkout_browser" {
         proxy_http_version 1.1;
         proxy_set_header Host 127.0.0.1:9223;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection $connection_upgrade;
         proxy_read_timeout 300s;
       }
     }

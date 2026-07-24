@@ -6,7 +6,7 @@ Automated AWS bot that monitors Target.com (and soon other retailers) for Pokemo
 ## Architecture
 - **ECS Fargate** — monitor task; single burst window 1:55–4:05 AM CT daily (130 min, 5s interval, `BURST_DURATION_SECONDS=7800`)
 - **Lambda `poketracker-prod-checkout-webhook`** — receives purchase requests, drives Target checkout over CDP; 300s timeout
-- **EC2 Chrome** (tag: `poketracker-prod-target-checkout-browser`) — persistent Chrome with saved Target session; CDP on VPC-private port 9223 → socat → 9222; VNC on 5901
+- **EC2 Chrome** (tag: `poketracker-prod-target-checkout-browser`) — persistent Chrome with saved Target session; CDP on VPC-private port 9223 → nginx → 9222; VNC on 5901
 - **EventBridge** — triggers Fargate monitor task and burst windows
 - **DynamoDB** — audit log, state, weekly spend tracking
 - **SES** — purchase alerts and failure notifications

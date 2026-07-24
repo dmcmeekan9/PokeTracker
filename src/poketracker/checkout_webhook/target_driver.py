@@ -96,8 +96,9 @@ def restart_cdp_browser_if_configured() -> None:
 def resolve_cdp_browser_url(cdp_url: str) -> str:
     """Return a CDP websocket URL reachable from the caller.
 
-    Chrome behind the EC2 socat proxy advertises a loopback websocket URL in
+    Chrome behind the EC2 nginx proxy advertises a loopback websocket URL in
     /json/version. Lambda needs the same path on the EC2 private host instead.
+    Retries for up to 20 seconds to handle Chrome startup delay after a restart.
     """
     parsed = urlparse(cdp_url)
     if parsed.scheme in {"ws", "wss"}:
@@ -107,19 +108,23 @@ def resolve_cdp_browser_url(cdp_url: str) -> str:
     port = parsed.port or 9222
     scheme = parsed.scheme or "http"
     version_url = f"{scheme}://{host}:{port}/json/version"
-    try:
-        with urllib.request.urlopen(version_url, timeout=5) as resp:
-            version = json.loads(resp.read())
-        ws_raw = version.get("webSocketDebuggerUrl")
-        if not isinstance(ws_raw, str) or not ws_raw:
-            return cdp_url
-        ws_url = urlparse(ws_raw)
-        if ws_url.hostname not in {"127.0.0.1", "localhost", "::1"}:
-            return cdp_url
-        netloc = f"{host}:{port}"
-        return urlunparse((ws_url.scheme, netloc, ws_url.path, ws_url.params, ws_url.query, ws_url.fragment))
-    except Exception:
-        return cdp_url
+    deadline = time.monotonic() + 20.0
+    while time.monotonic() < deadline:
+        try:
+            remaining = max(1.0, deadline - time.monotonic())
+            with urllib.request.urlopen(version_url, timeout=min(5.0, remaining)) as resp:
+                version = json.loads(resp.read())
+            ws_raw = version.get("webSocketDebuggerUrl")
+            if not isinstance(ws_raw, str) or not ws_raw:
+                return cdp_url
+            ws_url = urlparse(ws_raw)
+            if ws_url.hostname not in {"127.0.0.1", "localhost", "::1"}:
+                return ws_raw
+            netloc = f"{host}:{port}"
+            return urlunparse((ws_url.scheme, netloc, ws_url.path, ws_url.params, ws_url.query, ws_url.fragment))
+        except Exception:
+            time.sleep(1.0)
+    return cdp_url
 
 
 def kill_cdp_service_workers(cdp_url: str) -> None:
@@ -136,7 +141,7 @@ def kill_cdp_service_workers(cdp_url: str) -> None:
     port = parsed.port or 9222
 
     try:
-        with urllib.request.urlopen(f"http://{host}:{port}/json/version", timeout=5) as resp:
+        with urllib.request.urlopen(f"http://{host}:{port}/json/version", timeout=10) as resp:
             version = json.loads(resp.read())
         ws_url = urlparse(version["webSocketDebuggerUrl"])
         ws_path = ws_url.path

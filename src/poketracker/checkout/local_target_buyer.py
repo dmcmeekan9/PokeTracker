@@ -157,7 +157,7 @@ def purchase_target_item_from_cdp(
     except ImportError as exc:
         raise CheckoutWebhookError(503, "driver_dependency_missing", "Playwright is not installed") from exc
 
-    cdp_probe = probe_cdp_endpoint(cdp_url, timeout=5.0)
+    cdp_probe = probe_cdp_endpoint(cdp_url, timeout=10.0)
     if cdp_probe.get("tcp") != "ok" or cdp_probe.get("http") != "ok":
         restart_cdp_browser_if_configured()
     kill_cdp_service_workers(cdp_url)

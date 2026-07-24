@@ -696,7 +696,7 @@ resource "aws_lambda_function" "target_session_refresh" {
   role          = aws_iam_role.checkout_webhook[0].arn
   package_type  = "Image"
   image_uri     = var.checkout_webhook_image_uri
-  timeout       = 60
+  timeout       = 180
   memory_size   = 1024
 
   image_config {

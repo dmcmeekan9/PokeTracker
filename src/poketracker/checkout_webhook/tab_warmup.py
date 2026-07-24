@@ -45,7 +45,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     warmed: list[str] = []
     failed: list[str] = []
-    cdp_probe = probe_cdp_endpoint(cdp_url, timeout=5.0)
+    cdp_probe = probe_cdp_endpoint(cdp_url, timeout=10.0)
     if cdp_probe.get("tcp") != "ok" or cdp_probe.get("http") != "ok":
         restart_cdp_browser_if_configured()
 

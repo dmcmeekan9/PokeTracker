@@ -67,7 +67,7 @@ def test_probe_cdp_endpoint_reports_tcp_failure(monkeypatch) -> None:
     assert result["http"] == "unknown"
 
 
-def test_resolve_cdp_browser_url_keeps_http_endpoint_for_remote_websocket(monkeypatch) -> None:
+def test_resolve_cdp_browser_url_returns_ws_url_for_remote_websocket(monkeypatch) -> None:
     class Response:
         def __enter__(self):
             return self
@@ -80,7 +80,7 @@ def test_resolve_cdp_browser_url_keeps_http_endpoint_for_remote_websocket(monkey
 
     monkeypatch.setattr("poketracker.checkout_webhook.target_driver.urllib.request.urlopen", lambda *_args, **_kwargs: Response())
 
-    assert resolve_cdp_browser_url("http://10.42.0.108:9222") == "http://10.42.0.108:9222"
+    assert resolve_cdp_browser_url("http://10.42.0.108:9222") == "ws://10.42.0.108:9222/devtools/browser/abc"
 
 
 def test_new_target_context_retries_without_bad_storage_state() -> None:

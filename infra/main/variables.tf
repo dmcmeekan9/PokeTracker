@@ -100,7 +100,7 @@ variable "checkout_webhook_image_uri" {
 variable "checkout_webhook_memory_size" {
   description = "Memory size in MB for the managed checkout webhook Lambda. Higher memory also provides more CPU for Playwright orchestration."
   type        = number
-  default     = 2048
+  default     = 1024
 }
 
 variable "target_warmup_urls" {

@@ -66,6 +66,22 @@ def run_once() -> None:
 
     signals = _fetch_signals(enabled_items, adapters)
 
+    # If Redsky is broadly 403-ing (≥4 items in this iteration), it's rate-limiting not a
+    # real restock — suppress all probes to avoid launching 10 concurrent checkout Lambdas.
+    _redsky_403_count = sum(
+        1 for _, sig in signals
+        if sig is not None
+        and sig.item.retailer == Retailer.TARGET
+        and "redsky=unknown" in (sig.message or "")
+        and "http_403" in (sig.message or "")
+    )
+    _suppress_probe = _redsky_403_count >= 4
+    if _suppress_probe:
+        LOGGER.warning(
+            "suppressing target stock probe: %d items hit Redsky 403 (mass rate-limit, not a real restock)",
+            _redsky_403_count,
+        )
+
     # Evaluate all signals first; collect items that need a checkout attempt.
     pending: list[tuple[WatchlistItem, Any]] = []
     completed: list[tuple[WatchlistItem, Any]] = []
@@ -87,6 +103,7 @@ def run_once() -> None:
             if (
                 config.global_config.purchasing_enabled
                 and decision.type == DecisionType.SKIP
+                and not _suppress_probe
                 and _should_probe_target_stock(signal)
             ):
                 probe_signal = replace(

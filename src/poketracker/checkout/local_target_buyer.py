@@ -162,7 +162,7 @@ def purchase_target_item_from_cdp(
         restart_cdp_browser_if_configured()
     kill_cdp_service_workers(cdp_url)
     with sync_playwright() as playwright:
-        browser = playwright.chromium.connect_over_cdp(resolve_cdp_browser_url(cdp_url))
+        browser = playwright.chromium.connect_over_cdp(resolve_cdp_browser_url(cdp_url), timeout=15000)
         try:
             prewarmed = _find_prewarmed_tab(browser, request.url)
             if prewarmed:

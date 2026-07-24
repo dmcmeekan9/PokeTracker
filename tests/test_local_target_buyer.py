@@ -56,7 +56,7 @@ class FakeBrowser:
 
 class FakePlaywrightManager:
     def __init__(self, browser: FakeBrowser) -> None:
-        self.chromium = types.SimpleNamespace(connect_over_cdp=lambda cdp_url: browser)
+        self.chromium = types.SimpleNamespace(connect_over_cdp=lambda cdp_url, **kw: browser)
 
     def __enter__(self) -> "FakePlaywrightManager":
         return self
